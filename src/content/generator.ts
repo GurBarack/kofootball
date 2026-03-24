@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { buildPrompt } from './prompts.js';
+import { parseVariants, type StructuredContent } from './formatter.js';
 import type { ScoredStory } from '../detection/detector.js';
 
 let _client: OpenAI | null = null;
@@ -13,7 +14,7 @@ function getClient(): OpenAI {
   return _client;
 }
 
-export async function generateContent(story: ScoredStory): Promise<string[]> {
+export async function generateContent(story: ScoredStory): Promise<StructuredContent> {
   const { system, user } = buildPrompt(story);
 
   logger.info({ type: story.type, headline: story.headline }, 'Generating content');
@@ -30,11 +31,11 @@ export async function generateContent(story: ScoredStory): Promise<string[]> {
   });
 
   const raw = response.choices[0]?.message?.content || '';
-  const variants = raw
-    .split('---')
-    .map(v => v.trim())
-    .filter(v => v.length > 0);
+  const content = parseVariants(raw);
 
-  logger.info({ variants: variants.length }, 'Content generated');
-  return variants;
+  logger.info(
+    { hasMain: !!content.main, hasData: !!content.data, hasEdge: !!content.edge },
+    'Content generated',
+  );
+  return content;
 }

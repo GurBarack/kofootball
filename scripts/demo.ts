@@ -1,16 +1,14 @@
 /**
- * Demo script: shows detection + scoring + prompt output with mock data.
- * No API keys needed — uses seeded SQLite data and prints what the LLM would receive.
+ * Demo: shows improved detection + prompt + formatted output with mock data.
+ * No API keys needed.
  */
-import Database from 'better-sqlite3';
-import { runMigrations } from '../src/storage/migrations.js';
 import { buildPrompt } from '../src/content/prompts.js';
-import { formatForTelegram } from '../src/content/formatter.js';
+import { formatForTelegram, type StructuredContent } from '../src/content/formatter.js';
 import { scoreStory } from '../src/detection/scorer.js';
 import type { DetectedStory, ScoredStory } from '../src/detection/detector.js';
 import type { StandingRow } from '../src/storage/standings-repo.js';
 
-// ── Mock standings data (PL-like, late season) ──────────────────────────
+// ── Mock PL standings (matchday 32/38) ──────────────────────────────────
 const mockPLStandings: StandingRow[] = [
   { id:1, league_id:39, season:2025, team_id:42, team_name:'Arsenal', team_logo:'', rank:1, points:76, played:32, won:23, drawn:7, lost:2, goal_diff:45, form:'WWDWW', fetched_at:'' },
   { id:2, league_id:39, season:2025, team_id:50, team_name:'Manchester City', team_logo:'', rank:2, points:74, played:32, won:22, drawn:8, lost:2, goal_diff:48, form:'WWWDL', fetched_at:'' },
@@ -34,97 +32,75 @@ const mockPLStandings: StandingRow[] = [
   { id:20, league_id:39, season:2025, team_id:33, team_name:'Luton', team_logo:'', rank:20, points:20, played:32, won:4, drawn:8, lost:20, goal_diff:-34, form:'LLLLL', fetched_at:'' },
 ];
 
-// ── Run detection on mock data ──────────────────────────────────────────
+// ── Detection imports ───────────────────────────────────────────────────
 import { detectTitleRace } from '../src/detection/rules/title-race.js';
 import { detectRelegation } from '../src/detection/rules/relegation.js';
-import { detectQualification } from '../src/detection/rules/qualification.js';
-import { detectMomentum } from '../src/detection/rules/momentum.js';
+
+// ── Mock content that matches the new MAIN/DATA/EDGE structure ──────────
+
+const MOCK_TITLE_RACE: StructuredContent = {
+  main: "Arsenal have lost 2 games all season and they're still looking over their shoulder. City's GD is +48 — best in the league — and Liverpool just won 4 of their last 5. A 4-point lead with 6 games left means nothing when the two teams behind you are playing like that.",
+  data: "76, 74, 72. Three teams separated by 4 points after 32 games. Arsenal's form reads WWDWW but City have the better goal difference by 3. Liverpool's WLWWW is the most dangerous run — they're peaking at the right time.",
+  edge: "Arsenal are top and somehow feel like the most nervous team in this race.",
+};
+
+const MOCK_RELEGATION: StructuredContent = {
+  main: "Luton are on LLLLL and 8 points from safety. That's not a relegation battle, that's a funeral. The real fight is above them — Southampton, Ipswich, Bournemouth and Leicester are separated by 6 points with 6 games left, and none of them can string two results together.",
+  data: "4 teams in 5 points between 16th and 19th. Leicester's form: LDLLL. Bournemouth's: LLLDL. Southampton's: DLLDL. Combined record in the last 15 games: 2 wins. Two.",
+  edge: "Luton's GD is -34. At some point you stop calling it a relegation fight and just call it what it is.",
+};
 
 function run() {
-  console.log('═══════════════════════════════════════════════════════════');
-  console.log('  KO FOOTBALL — Detection + Generation Demo');
-  console.log('═══════════════════════════════════════════════════════════\n');
+  console.log('═══════════════════════════════════════════════════════════════');
+  console.log('  KO FOOTBALL — Improved Content Structure Demo');
+  console.log('═══════════════════════════════════════════════════════════════\n');
 
-  const allDetected: DetectedStory[] = [];
+  // ── Title Race ─────────────────────────────────────────────────────────
+  const titleStories = detectTitleRace(39, mockPLStandings);
+  if (titleStories.length > 0) {
+    const scored: ScoredStory = {
+      ...titleStories[0],
+      score: scoreStory(titleStories[0], mockPLStandings),
+    };
 
-  // Title race
-  const titleRace = detectTitleRace(39, mockPLStandings);
-  allDetected.push(...titleRace);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('  EXAMPLE 1: TITLE RACE');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
-  // Relegation
-  const relegation = detectRelegation(39, mockPLStandings);
-  allDetected.push(...relegation);
-
-  // Qualification
-  const qualification = detectQualification(39, mockPLStandings);
-  allDetected.push(...qualification);
-
-  // Momentum
-  const momentum = detectMomentum(39, mockPLStandings);
-  allDetected.push(...momentum);
-
-  // Score all
-  const scored: ScoredStory[] = allDetected
-    .map(s => ({ ...s, score: scoreStory(s, mockPLStandings) }))
-    .sort((a, b) => b.score - a.score);
-
-  console.log(`Detected ${scored.length} stories. Top 5:\n`);
-
-  const top5 = scored.slice(0, 5);
-  for (const story of top5) {
-    console.log('───────────────────────────────────────────────────────────');
-    console.log(`TYPE: ${story.type} | SCORE: ${story.score}`);
-    console.log(`HEADLINE: ${story.headline}\n`);
-
-    // Show what the LLM would receive
-    const { system, user } = buildPrompt(story);
+    // Show the prompt that goes to the LLM
+    const { system, user } = buildPrompt(scored);
     console.log('── LLM SYSTEM PROMPT ──');
     console.log(system);
     console.log('\n── LLM USER PROMPT ──');
     console.log(user);
 
-    // Show mock formatted output
-    const mockVariants = generateMockVariants(story);
-    console.log('\n── TELEGRAM OUTPUT (mock variants) ──');
-    console.log(formatForTelegram(story, mockVariants));
+    // Show formatted Telegram output
+    console.log('\n── TELEGRAM OUTPUT ──');
+    console.log(formatForTelegram(scored, MOCK_TITLE_RACE));
     console.log('');
   }
-}
 
-function generateMockVariants(story: ScoredStory): string[] {
-  const payload = story.payload as Record<string, unknown>;
+  // ── Relegation ─────────────────────────────────────────────────────────
+  const relStories = detectRelegation(39, mockPLStandings);
+  if (relStories.length > 0) {
+    const scored: ScoredStory = {
+      ...relStories[0],
+      score: scoreStory(relStories[0], mockPLStandings),
+    };
 
-  switch (story.type) {
-    case 'title_race': {
-      const teams = payload.teams as Array<Record<string, unknown>>;
-      const t1 = teams[0], t2 = teams[1];
-      return [
-        `${t1.name} lead by ${payload.pointGap} points but ${t2.name} won't blink. Six games. Two points. One of them is going to crack and it won't be pretty.`,
-        `Everyone's talking about ${t1.name}'s "comfortable" lead. ${payload.pointGap} points with ${payload.gamesLeft} games left isn't comfortable. Ask anyone who watched 2012.`,
-        `${t2.name} dropped points last week and the gap is still just ${payload.pointGap}. ${t1.name} aren't running away with this. They're stumbling toward the finish line.`,
-      ];
-    }
-    case 'relegation':
-      return [
-        `Six teams. Five points. Three go down. The bottom of the Premier League right now is a horror movie where nobody can find the exit.`,
-        `Southampton are sinking. Luton look finished. But Leicester and Bournemouth aren't safe either — one bad week and they're in the coffin.`,
-      ];
-    case 'momentum': {
-      const team = payload.team as string;
-      const form = payload.form as string;
-      if ((payload.streakType as string) === 'cold') {
-        return [
-          `${team}: ${form}. Read that again. That's not a blip. That's a team that forgot how to win.`,
-          `Five games. Zero wins. ${team} are watching the season collapse in slow motion and nothing they try is working.`,
-        ];
-      }
-      return [
-        `${team} have won ${payload.winsInLast5} of their last 5. Nobody wants to play them right now. The form table doesn't lie.`,
-        `Something clicked at ${team}. ${form} in the last five — they're the form team and the table is starting to reflect it.`,
-      ];
-    }
-    default:
-      return [`[Mock variant for ${story.type}]`];
+    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('  EXAMPLE 2: RELEGATION');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+    const { system, user } = buildPrompt(scored);
+    console.log('── LLM SYSTEM PROMPT ──');
+    console.log(system);
+    console.log('\n── LLM USER PROMPT ──');
+    console.log(user);
+
+    console.log('\n── TELEGRAM OUTPUT ──');
+    console.log(formatForTelegram(scored, MOCK_RELEGATION));
+    console.log('');
   }
 }
 
