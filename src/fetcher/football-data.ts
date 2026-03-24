@@ -3,12 +3,15 @@ import { http } from '../utils/http.js';
 import { logger } from '../utils/logger.js';
 import type { ApiStandingRow, ApiFixture } from './types.js';
 
-// ── Per-minute rate limiting ────────────────────────────────────────────
+// ── Per-minute rate limiting with 429 retry ─────────────────────────────
 
 let requestTimestamps: number[] = [];
 let totalRequests = 0;
+let serverAvailable: number | null = null; // from X-Requests-Available-Minute header
 
 function canRequest(): boolean {
+  // If the server told us we have 0 remaining, respect that
+  if (serverAvailable !== null && serverAvailable <= 0) return false;
   const now = Date.now();
   requestTimestamps = requestTimestamps.filter(t => now - t < 60_000);
   return requestTimestamps.length < config.footballData.rateLimitPerMin;
@@ -17,9 +20,11 @@ function canRequest(): boolean {
 async function waitForSlot(): Promise<void> {
   while (!canRequest()) {
     const oldest = requestTimestamps[0];
-    const waitMs = 60_000 - (Date.now() - oldest) + 100;
+    const waitMs = oldest ? 60_000 - (Date.now() - oldest) + 500 : 10_000;
     logger.info({ waitMs }, 'Rate limit — waiting');
-    await new Promise(r => setTimeout(r, waitMs));
+    await new Promise(r => setTimeout(r, Math.max(waitMs, 1_000)));
+    // Reset server counter after waiting
+    serverAvailable = null;
   }
 }
 
@@ -29,14 +34,37 @@ function trackRequest(): void {
   logger.info({ totalRequests }, 'API request count');
 }
 
-async function apiGet<T>(path: string): Promise<T> {
-  await waitForSlot();
-  trackRequest();
+const MAX_RETRIES = 2;
 
-  const { data } = await http.get<T>(`${config.footballData.baseUrl}${path}`, {
-    headers: { 'X-Auth-Token': config.footballData.key },
-  });
-  return data;
+async function apiGet<T>(path: string): Promise<T> {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    await waitForSlot();
+    trackRequest();
+
+    try {
+      const resp = await http.get<T>(`${config.footballData.baseUrl}${path}`, {
+        headers: { 'X-Auth-Token': config.footballData.key },
+      });
+
+      // Track server-side availability
+      const avail = resp.headers?.['x-requests-available-minute'];
+      if (avail !== undefined) serverAvailable = Number(avail);
+
+      return resp.data;
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; headers?: Record<string, string> } };
+      if (axiosErr.response?.status === 429) {
+        const resetSec = Number(axiosErr.response.headers?.['x-requestcounter-reset'] || 60);
+        serverAvailable = 0;
+        logger.warn({ attempt, resetSec, path }, '429 rate limited — backing off');
+        await new Promise(r => setTimeout(r, (resetSec + 1) * 1000));
+        serverAvailable = null;
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error(`API request failed after ${MAX_RETRIES + 1} attempts: ${path}`);
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────
