@@ -9,7 +9,8 @@
     "once": "tsx src/index.ts --once",
     "seed": "tsx scripts/seed.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:telegram": "tsx scripts/test-telegram.ts"
   },
   "dependencies": {
     "axios": "^1.7.0",
