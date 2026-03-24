@@ -37,15 +37,15 @@ const standings: StandingRow[] = [
 // ── Mock content (what the LLM would produce) ───────────────────────────
 
 const titleRaceContent: StructuredContent = {
-  main: "City lost last week and Arsenal still couldn't pull away. That tells you everything. 4 points with 6 games left, Liverpool running WLWWW behind them, and City sitting on the best GD in the league at +48. Arsenal are first but they don't control this.",
-  data: "32 games in. Arsenal 76, City 74, Liverpool 72. City have drawn 8 — most of the top 3 — but only lost twice. Liverpool have lost 4 but their recent form is the sharpest: 4 wins in 5. The team with the worst record is leading the table.",
-  edge: "Arsenal's 2-loss season somehow feels more fragile than City's 8 draws.",
+  main: "Arsenal have the fewest losses in the league and the least control over the title. Two defeats all season, 76 points, top of the table — and none of it feels safe. City's GD is +48, three better than Arsenal's, on two fewer wins. Liverpool have won 4 of their last 5. First place belongs to the team with the least margin for error.",
+  data: "Arsenal 76, City 74, Liverpool 72. City's 8 draws are the most in the top 3 but their 2 losses are tied for fewest. Liverpool's form is the sharpest in the league: WLWWW, 4 wins in 5. Arsenal's WWDWW looks stable until you notice City closed a 6-point gap to 2 in three weeks.",
+  edge: "The best defensive record in the league and Arsenal still can't breathe.",
 };
 
 const relegationContent: StructuredContent = {
-  main: "Forget Luton — they're gone. LLLLL, GD of -34, 8 points from safety. The actual relegation fight is Leicester, Bournemouth and Southampton scrapping over 17th. Three points separate them and they've won 2 games between them in their last 15.",
-  data: "Leicester 31pts, Bournemouth 30, Southampton 28. Their combined last-5 form: LDLLL, LLLDL, DLLDL. That's 1 win in 15 attempts. Ipswich at 25pts still have a pulse — they beat someone last week. Nobody above them did.",
-  edge: null,  // Omitted — doesn't add anything the main didn't already say sharper
+  main: "Three teams fighting for 17th. One win between them in their last 15 games. Leicester, Bournemouth and Southampton are separated by 3 points and united by the same problem: none of them can win a football match. Bournemouth have lost 16 — worst in the league outside Luton. Southampton have drawn 10 and converted none of that resilience into points that matter.",
+  data: "Leicester 31pts (form: LDLLL), Bournemouth 30 (LLLDL), Southampton 28 (DLLDL). Combined: 1 win in 15. Ipswich sit on 25 but their LLLLW includes the only bottom-5 win in the last two matchdays. Luton at 20 pts, GD -34, have lost every game since February.",
+  edge: null,  // Omitted — main already carries the sharpest framing
 };
 
 // ── Run ─────────────────────────────────────────────────────────────────
