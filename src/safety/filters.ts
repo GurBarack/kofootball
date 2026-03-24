@@ -6,11 +6,10 @@ import type { StructuredContent } from '../content/formatter.js';
 
 // ── Score threshold ─────────────────────────────────────────────────────
 
-const MIN_SCORE = 35;
-
 export function passesScoreThreshold(story: ScoredStory): boolean {
-  if (story.score < MIN_SCORE) {
-    logger.info({ type: story.type, score: story.score, min: MIN_SCORE }, 'Below score threshold');
+  const min = config.minScoreThreshold;
+  if (story.score < min) {
+    logger.info({ type: story.type, score: story.score, min }, 'Below score threshold');
     return false;
   }
   return true;
@@ -31,6 +30,11 @@ export function isDuplicate(story: ScoredStory): boolean {
   }
   return dup;
 }
+
+// TODO: Add similarity-based dedup — compare overlapping teams in payload,
+// headline cosine similarity, and payload key intersection. This would catch
+// cases like a title_race and qualification story about the same top-4 teams,
+// or two momentum stories featuring clubs in the same relegation cluster.
 
 // ── Content quality ─────────────────────────────────────────────────────
 
@@ -70,7 +74,7 @@ export interface FilterResult {
 /** Pre-generation filter: score + dedup */
 export function preFilter(story: ScoredStory): FilterResult {
   if (!passesScoreThreshold(story)) {
-    return { passed: false, reason: `Score ${story.score} below threshold ${MIN_SCORE}` };
+    return { passed: false, reason: `Score ${story.score} below threshold ${config.minScoreThreshold}` };
   }
   if (isDuplicate(story)) {
     return { passed: false, reason: `Duplicate: ${story.type} for league ${story.league_id}` };

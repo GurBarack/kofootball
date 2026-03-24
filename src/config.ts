@@ -49,6 +49,7 @@ export const config = {
   enabledStoryTypes: ['title_race', 'relegation', 'momentum', 'qualification', 'critical_fixture'] as const,
   enabledLeagues: [39, 140] as const, // PL + La Liga
   maxStoriesPerRun: 5,
+  minScoreThreshold: 50,
   leagueCooldownHours: 12,
 
   // Supported leagues (full catalog — enabledLeagues controls which are active)

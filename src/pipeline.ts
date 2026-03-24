@@ -149,8 +149,17 @@ export async function runPipeline(): Promise<PipelineResult> {
   }
 
   // 2. Detect + filter
-  const stories = detectAndFilter();
-  result.detected = stories.length;
+  const allFiltered = detectAndFilter();
+  result.detected = allFiltered.length;
+
+  // Cap to maxStoriesPerRun — only the top-scoring stories get delivered
+  const stories = allFiltered.slice(0, config.maxStoriesPerRun);
+  if (allFiltered.length > stories.length) {
+    logger.info(
+      { total: allFiltered.length, delivering: stories.length, cap: config.maxStoriesPerRun },
+      'Capped stories to maxStoriesPerRun',
+    );
+  }
 
   if (stories.length === 0) {
     logger.info('No stories passed filters. Pipeline done.');

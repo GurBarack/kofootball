@@ -3,6 +3,7 @@
  * No API keys — exercises: detection → scoring → safety filters → formatting → output.
  * Simulates what runPipeline() does, with mock fetch + mock LLM.
  */
+import { config } from '../src/config.js';
 import { getDb } from '../src/storage/db.js';
 import { logger } from '../src/utils/logger.js';
 import { detectStories } from '../src/detection/detector.js';
@@ -118,11 +119,17 @@ function run() {
   }
   console.log(`\n  ${passed.length}/${stories.length} stories passed pre-filter\n`);
 
+  // Step 3b: cap to maxStoriesPerRun
+  const capped = passed.slice(0, config.maxStoriesPerRun);
+  if (passed.length > capped.length) {
+    console.log(`  Capped: ${passed.length} → ${capped.length} (maxStoriesPerRun=${config.maxStoriesPerRun})\n`);
+  }
+
   // Step 4: generate + quality check
   console.log('STEP 4: Generate content + quality check\n');
   const ready: Array<{ story: ScoredStory; content: StructuredContent }> = [];
 
-  for (const story of passed) {
+  for (const story of capped) {
     const content = mockGenerate(story);
     const quality = postFilter(content);
 
@@ -133,7 +140,7 @@ function run() {
       console.log(`  [${story.score}] ${story.type}: QUALITY FAIL — ${quality.reason}`);
     }
   }
-  console.log(`\n  ${ready.length}/${passed.length} stories passed quality check\n`);
+  console.log(`\n  ${ready.length}/${capped.length} stories passed quality check\n`);
 
   // Step 5: format for delivery
   console.log('STEP 5: Telegram output\n');
@@ -147,10 +154,11 @@ function run() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('  PIPELINE SUMMARY');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`  Detected:  ${stories.length}`);
-  console.log(`  Pre-filter: ${passed.length}`);
-  console.log(`  Generated: ${ready.length}`);
-  console.log(`  Ready to deliver: ${ready.length}`);
+  console.log(`  Detected:     ${stories.length}`);
+  console.log(`  Pre-filter:   ${passed.length} (score >= ${config.minScoreThreshold}, no dupes)`);
+  console.log(`  Capped:       ${capped.length} (maxStoriesPerRun=${config.maxStoriesPerRun})`);
+  console.log(`  Quality pass: ${ready.length}`);
+  console.log(`  Delivered:    ${ready.length}`);
   console.log('');
 }
 
