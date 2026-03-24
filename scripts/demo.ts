@@ -1,15 +1,17 @@
 /**
- * Demo: shows improved detection + prompt + formatted output with mock data.
+ * Demo: full Telegram preview output with mock data.
  * No API keys needed.
  */
 import { buildPrompt } from '../src/content/prompts.js';
 import { formatForTelegram, type StructuredContent } from '../src/content/formatter.js';
 import { scoreStory } from '../src/detection/scorer.js';
-import type { DetectedStory, ScoredStory } from '../src/detection/detector.js';
+import type { ScoredStory } from '../src/detection/detector.js';
 import type { StandingRow } from '../src/storage/standings-repo.js';
+import { detectTitleRace } from '../src/detection/rules/title-race.js';
+import { detectRelegation } from '../src/detection/rules/relegation.js';
 
 // ── Mock PL standings (matchday 32/38) ──────────────────────────────────
-const mockPLStandings: StandingRow[] = [
+const standings: StandingRow[] = [
   { id:1, league_id:39, season:2025, team_id:42, team_name:'Arsenal', team_logo:'', rank:1, points:76, played:32, won:23, drawn:7, lost:2, goal_diff:45, form:'WWDWW', fetched_at:'' },
   { id:2, league_id:39, season:2025, team_id:50, team_name:'Manchester City', team_logo:'', rank:2, points:74, played:32, won:22, drawn:8, lost:2, goal_diff:48, form:'WWWDL', fetched_at:'' },
   { id:3, league_id:39, season:2025, team_id:40, team_name:'Liverpool', team_logo:'', rank:3, points:72, played:32, won:22, drawn:6, lost:4, goal_diff:42, form:'WLWWW', fetched_at:'' },
@@ -32,76 +34,65 @@ const mockPLStandings: StandingRow[] = [
   { id:20, league_id:39, season:2025, team_id:33, team_name:'Luton', team_logo:'', rank:20, points:20, played:32, won:4, drawn:8, lost:20, goal_diff:-34, form:'LLLLL', fetched_at:'' },
 ];
 
-// ── Detection imports ───────────────────────────────────────────────────
-import { detectTitleRace } from '../src/detection/rules/title-race.js';
-import { detectRelegation } from '../src/detection/rules/relegation.js';
+// ── Mock content (what the LLM would produce) ───────────────────────────
 
-// ── Mock content that matches the new MAIN/DATA/EDGE structure ──────────
-
-const MOCK_TITLE_RACE: StructuredContent = {
-  main: "Arsenal have lost 2 games all season and they're still looking over their shoulder. City's GD is +48 — best in the league — and Liverpool just won 4 of their last 5. A 4-point lead with 6 games left means nothing when the two teams behind you are playing like that.",
-  data: "76, 74, 72. Three teams separated by 4 points after 32 games. Arsenal's form reads WWDWW but City have the better goal difference by 3. Liverpool's WLWWW is the most dangerous run — they're peaking at the right time.",
-  edge: "Arsenal are top and somehow feel like the most nervous team in this race.",
+const titleRaceContent: StructuredContent = {
+  main: "City lost last week and Arsenal still couldn't pull away. That tells you everything. 4 points with 6 games left, Liverpool running WLWWW behind them, and City sitting on the best GD in the league at +48. Arsenal are first but they don't control this.",
+  data: "32 games in. Arsenal 76, City 74, Liverpool 72. City have drawn 8 — most of the top 3 — but only lost twice. Liverpool have lost 4 but their recent form is the sharpest: 4 wins in 5. The team with the worst record is leading the table.",
+  edge: "Arsenal's 2-loss season somehow feels more fragile than City's 8 draws.",
 };
 
-const MOCK_RELEGATION: StructuredContent = {
-  main: "Luton are on LLLLL and 8 points from safety. That's not a relegation battle, that's a funeral. The real fight is above them — Southampton, Ipswich, Bournemouth and Leicester are separated by 6 points with 6 games left, and none of them can string two results together.",
-  data: "4 teams in 5 points between 16th and 19th. Leicester's form: LDLLL. Bournemouth's: LLLDL. Southampton's: DLLDL. Combined record in the last 15 games: 2 wins. Two.",
-  edge: "Luton's GD is -34. At some point you stop calling it a relegation fight and just call it what it is.",
+const relegationContent: StructuredContent = {
+  main: "Forget Luton — they're gone. LLLLL, GD of -34, 8 points from safety. The actual relegation fight is Leicester, Bournemouth and Southampton scrapping over 17th. Three points separate them and they've won 2 games between them in their last 15.",
+  data: "Leicester 31pts, Bournemouth 30, Southampton 28. Their combined last-5 form: LDLLL, LLLDL, DLLDL. That's 1 win in 15 attempts. Ipswich at 25pts still have a pulse — they beat someone last week. Nobody above them did.",
+  edge: null,  // Omitted — doesn't add anything the main didn't already say sharper
 };
+
+// ── Run ─────────────────────────────────────────────────────────────────
 
 function run() {
-  console.log('═══════════════════════════════════════════════════════════════');
-  console.log('  KO FOOTBALL — Improved Content Structure Demo');
-  console.log('═══════════════════════════════════════════════════════════════\n');
+  console.log('');
 
-  // ── Title Race ─────────────────────────────────────────────────────────
-  const titleStories = detectTitleRace(39, mockPLStandings);
-  if (titleStories.length > 0) {
+  // Title race
+  const titleStories = detectTitleRace(39, standings);
+  if (titleStories[0]) {
     const scored: ScoredStory = {
       ...titleStories[0],
-      score: scoreStory(titleStories[0], mockPLStandings),
+      score: scoreStory(titleStories[0], standings),
     };
-
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('  EXAMPLE 1: TITLE RACE');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    console.log(formatForTelegram(scored, titleRaceContent));
 
-    // Show the prompt that goes to the LLM
-    const { system, user } = buildPrompt(scored);
-    console.log('── LLM SYSTEM PROMPT ──');
-    console.log(system);
-    console.log('\n── LLM USER PROMPT ──');
+    console.log('\n\n── PROMPT SENT TO LLM ──');
+    const { user } = buildPrompt(scored);
     console.log(user);
-
-    // Show formatted Telegram output
-    console.log('\n── TELEGRAM OUTPUT ──');
-    console.log(formatForTelegram(scored, MOCK_TITLE_RACE));
-    console.log('');
   }
 
-  // ── Relegation ─────────────────────────────────────────────────────────
-  const relStories = detectRelegation(39, mockPLStandings);
-  if (relStories.length > 0) {
+  console.log('\n');
+
+  // Relegation
+  const relStories = detectRelegation(39, standings);
+  if (relStories[0]) {
     const scored: ScoredStory = {
       ...relStories[0],
-      score: scoreStory(relStories[0], mockPLStandings),
+      score: scoreStory(relStories[0], standings),
     };
-
-    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('  EXAMPLE 2: RELEGATION');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    console.log(formatForTelegram(scored, relegationContent));
 
-    const { system, user } = buildPrompt(scored);
-    console.log('── LLM SYSTEM PROMPT ──');
-    console.log(system);
-    console.log('\n── LLM USER PROMPT ──');
+    console.log('\n\n── PROMPT SENT TO LLM ──');
+    const { user } = buildPrompt(scored);
     console.log(user);
-
-    console.log('\n── TELEGRAM OUTPUT ──');
-    console.log(formatForTelegram(scored, MOCK_RELEGATION));
-    console.log('');
   }
+
+  console.log('\n\n── PUBLISHING LOGIC ──');
+  console.log('MAIN   = the post. Approve sends this.');
+  console.log('DATA   = swap-in alternative (reviewer choice).');
+  console.log('EDGE   = only shown if it passes quality gate. Omitted above for relegation.\n');
 }
 
 run();
