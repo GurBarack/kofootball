@@ -77,7 +77,7 @@ export const config = {
     path: './data/kofootball.db',
   },
 
-  season: 2024,
+  season: 2025,
 } as const;
 
 export type StoryType = (typeof config.enabledStoryTypes)[number];
