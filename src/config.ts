@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { z } from 'zod';
 
 const envSchema = z.object({
-  API_FOOTBALL_KEY: z.string().min(1),
+  FOOTBALL_DATA_KEY: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   TELEGRAM_CHAT_ID: z.string().min(1),
@@ -14,17 +14,17 @@ const env = envSchema.safeParse(process.env);
 const safeEnv = env.success
   ? env.data
   : {
-      API_FOOTBALL_KEY: process.env.API_FOOTBALL_KEY || '',
+      FOOTBALL_DATA_KEY: process.env.FOOTBALL_DATA_KEY || '',
       OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
       TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
       TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || '',
     };
 
 export const config = {
-  apiFootball: {
-    key: safeEnv.API_FOOTBALL_KEY,
-    baseUrl: 'https://v3.football.api-sports.io',
-    dailyLimit: 100,
+  footballData: {
+    key: safeEnv.FOOTBALL_DATA_KEY,
+    baseUrl: 'https://api.football-data.org/v4',
+    rateLimitPerMin: 10,
   },
 
   openai: {
@@ -59,7 +59,15 @@ export const config = {
     135: 'Serie A',
     78: 'Bundesliga',
     2: 'Champions League',
-    3: 'Europa League',
+  } as Record<number, string>,
+
+  // Maps internal numeric league IDs → Football-Data.org competition codes
+  leagueCodeMap: {
+    39: 'PL',
+    140: 'PD',
+    135: 'SA',
+    78: 'BL1',
+    2: 'CL',
   } as Record<number, string>,
 
   // Content tone — injected into every LLM prompt
@@ -76,8 +84,6 @@ export const config = {
   db: {
     path: './data/kofootball.db',
   },
-
-  season: 2024,
 } as const;
 
 export type StoryType = (typeof config.enabledStoryTypes)[number];

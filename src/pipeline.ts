@@ -1,6 +1,6 @@
 import { config } from './config.js';
 import { logger } from './utils/logger.js';
-import { fetchStandings, fetchRecentFixtures, fetchUpcomingFixtures, getRequestCount } from './fetcher/api-football.js';
+import { fetchStandings, fetchRecentFixtures, fetchUpcomingFixtures, getRequestCount } from './fetcher/football-data.js';
 import { saveStandings } from './storage/standings-repo.js';
 import { saveFixtures } from './storage/fixtures-repo.js';
 import { insertStory, updateStoryContent } from './storage/stories-repo.js';
@@ -27,16 +27,17 @@ async function fetchData(): Promise<number> {
 
   for (const leagueId of config.enabledLeagues) {
     try {
-      const standings = await fetchStandings(leagueId, config.season);
+      const currentSeason = new Date().getMonth() >= 7 ? new Date().getFullYear() : new Date().getFullYear() - 1;
+      const standings = await fetchStandings(leagueId);
       if (standings.length > 0) {
-        saveStandings(leagueId, config.season, standings);
+        saveStandings(leagueId, currentSeason, standings);
         fetched++;
       }
 
-      const recent = await fetchRecentFixtures(leagueId, config.season);
+      const recent = await fetchRecentFixtures(leagueId);
       if (recent.length > 0) saveFixtures(leagueId, recent);
 
-      const upcoming = await fetchUpcomingFixtures(leagueId, config.season);
+      const upcoming = await fetchUpcomingFixtures(leagueId);
       if (upcoming.length > 0) saveFixtures(leagueId, upcoming);
 
       logger.info({ leagueId, standings: standings.length, recent: recent.length, upcoming: upcoming.length }, 'Data fetched');

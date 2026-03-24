@@ -4,7 +4,7 @@
  */
 import { config } from '../src/config.js';
 import { getDb } from '../src/storage/db.js';
-import { fetchStandings, fetchRecentFixtures, fetchUpcomingFixtures, getRequestCount } from '../src/fetcher/api-football.js';
+import { fetchStandings, fetchRecentFixtures, fetchUpcomingFixtures, getRequestCount } from '../src/fetcher/football-data.js';
 import { saveStandings } from '../src/storage/standings-repo.js';
 import { saveFixtures } from '../src/storage/fixtures-repo.js';
 import { logger } from '../src/utils/logger.js';
@@ -15,7 +15,7 @@ async function seed() {
   // Initialize database (creates tables if needed)
   getDb();
 
-  const season = config.season;
+  const currentSeason = new Date().getMonth() >= 7 ? new Date().getFullYear() : new Date().getFullYear() - 1;
   const leagues = config.enabledLeagues;
 
   for (const leagueId of leagues) {
@@ -24,23 +24,23 @@ async function seed() {
 
     try {
       // Fetch standings
-      const standings = await fetchStandings(leagueId, season);
+      const standings = await fetchStandings(leagueId);
       if (standings.length > 0) {
-        saveStandings(leagueId, season, standings);
+        saveStandings(leagueId, currentSeason, standings);
         logger.info({ leagueId, teams: standings.length }, 'Saved standings');
       } else {
         logger.warn({ leagueId }, 'No standings data returned');
       }
 
       // Fetch recent fixtures
-      const recent = await fetchRecentFixtures(leagueId, season);
+      const recent = await fetchRecentFixtures(leagueId);
       if (recent.length > 0) {
         saveFixtures(leagueId, recent);
         logger.info({ leagueId, fixtures: recent.length }, 'Saved recent fixtures');
       }
 
       // Fetch upcoming fixtures
-      const upcoming = await fetchUpcomingFixtures(leagueId, season);
+      const upcoming = await fetchUpcomingFixtures(leagueId);
       if (upcoming.length > 0) {
         saveFixtures(leagueId, upcoming);
         logger.info({ leagueId, fixtures: upcoming.length }, 'Saved upcoming fixtures');
