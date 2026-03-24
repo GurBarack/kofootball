@@ -1,37 +1,56 @@
 import { config } from '../config.js';
 import { http } from '../utils/http.js';
 import { logger } from '../utils/logger.js';
+import { getDb } from '../storage/db.js';
 import type { ApiStandingRow, ApiFixture } from './types.js';
 
-// ── Per-minute rate limiting with 429 retry ─────────────────────────────
+// ── SQLite-backed rate limiter (shared across processes) ────────────────
 
-let requestTimestamps: number[] = [];
+const WINDOW_SEC = 60;
+const MAX_PER_WINDOW = config.footballData.rateLimitPerMin;
 let totalRequests = 0;
-let serverAvailable: number | null = null; // from X-Requests-Available-Minute header
 
-function canRequest(): boolean {
-  // If the server told us we have 0 remaining, respect that
-  if (serverAvailable !== null && serverAvailable <= 0) return false;
-  const now = Date.now();
-  requestTimestamps = requestTimestamps.filter(t => now - t < 60_000);
-  return requestTimestamps.length < config.footballData.rateLimitPerMin;
+/** Count requests made by ANY process in the last 60 seconds */
+function recentRequestCount(): number {
+  const db = getDb();
+  const cutoff = new Date(Date.now() - WINDOW_SEC * 1000).toISOString();
+  const row = db.prepare(
+    'SELECT COUNT(*) as cnt FROM api_requests WHERE requested_at > ?',
+  ).get(cutoff) as { cnt: number };
+  return row.cnt;
 }
 
-async function waitForSlot(): Promise<void> {
-  while (!canRequest()) {
-    const oldest = requestTimestamps[0];
-    const waitMs = oldest ? 60_000 - (Date.now() - oldest) + 500 : 10_000;
-    logger.info({ waitMs }, 'Rate limit — waiting');
-    await new Promise(r => setTimeout(r, Math.max(waitMs, 1_000)));
-    // Reset server counter after waiting
-    serverAvailable = null;
-  }
-}
-
-function trackRequest(): void {
-  requestTimestamps.push(Date.now());
+/** Record a request timestamp in the DB */
+function recordRequest(): void {
+  const db = getDb();
+  db.prepare('INSERT INTO api_requests (requested_at) VALUES (?)').run(new Date().toISOString());
   totalRequests++;
-  logger.info({ totalRequests }, 'API request count');
+
+  // Prune old rows (older than 2 minutes) to keep the table small
+  const cutoff = new Date(Date.now() - 120_000).toISOString();
+  db.prepare('DELETE FROM api_requests WHERE requested_at < ?').run(cutoff);
+}
+
+/** Wait until a rate limit slot is available */
+async function waitForSlot(): Promise<void> {
+  let count = recentRequestCount();
+  while (count >= MAX_PER_WINDOW) {
+    // Find the oldest request in the window to calculate wait time
+    const db = getDb();
+    const cutoff = new Date(Date.now() - WINDOW_SEC * 1000).toISOString();
+    const oldest = db.prepare(
+      'SELECT requested_at FROM api_requests WHERE requested_at > ? ORDER BY requested_at ASC LIMIT 1',
+    ).get(cutoff) as { requested_at: string } | undefined;
+
+    const waitMs = oldest
+      ? Math.max(new Date(oldest.requested_at).getTime() + WINDOW_SEC * 1000 - Date.now() + 500, 1000)
+      : 10_000;
+
+    logger.info({ waitMs, used: count, limit: MAX_PER_WINDOW }, 'Rate limit — waiting for slot');
+    await new Promise(r => setTimeout(r, waitMs));
+    count = recentRequestCount();
+  }
+  logger.info({ used: count, limit: MAX_PER_WINDOW }, 'Rate limit slot available');
 }
 
 const MAX_RETRIES = 2;
@@ -39,26 +58,19 @@ const MAX_RETRIES = 2;
 async function apiGet<T>(path: string): Promise<T> {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     await waitForSlot();
-    trackRequest();
+    recordRequest();
 
     try {
       const resp = await http.get<T>(`${config.footballData.baseUrl}${path}`, {
         headers: { 'X-Auth-Token': config.footballData.key },
       });
-
-      // Track server-side availability
-      const avail = resp.headers?.['x-requests-available-minute'];
-      if (avail !== undefined) serverAvailable = Number(avail);
-
       return resp.data;
     } catch (err: unknown) {
       const axiosErr = err as { response?: { status?: number; headers?: Record<string, string> } };
       if (axiosErr.response?.status === 429) {
         const resetSec = Number(axiosErr.response.headers?.['x-requestcounter-reset'] || 60);
-        serverAvailable = 0;
         logger.warn({ attempt, resetSec, path }, '429 rate limited — backing off');
         await new Promise(r => setTimeout(r, (resetSec + 1) * 1000));
-        serverAvailable = null;
         continue;
       }
       throw err;

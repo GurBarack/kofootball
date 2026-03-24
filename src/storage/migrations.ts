@@ -63,5 +63,13 @@ export function runMigrations(db: Database.Database): void {
       ON stories(league_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_stories_type
       ON stories(type);
+
+    CREATE TABLE IF NOT EXISTS api_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      requested_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_api_requests_at
+      ON api_requests(requested_at);
   `);
 }
