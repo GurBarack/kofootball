@@ -1,0 +1,62 @@
+{
+  "titleRaceStory": {
+    "type": "title_race",
+    "league_id": 39,
+    "headline": "Arsenal vs Man City vs Liverpool — 3pt gap, 6 games left",
+    "payload": {
+      "teams": [
+        { "name": "Arsenal", "rank": 1, "points": 76, "played": 32, "form": "WWDWW", "goal_diff": 45 },
+        { "name": "Man City", "rank": 2, "points": 74, "played": 32, "form": "WDWWW", "goal_diff": 42 },
+        { "name": "Liverpool", "rank": 3, "points": 73, "played": 32, "form": "WLWWW", "goal_diff": 38 }
+      ],
+      "pointGap": 3,
+      "gamesLeft": 6
+    },
+    "score": 75
+  },
+  "relegationStory": {
+    "type": "relegation",
+    "league_id": 39,
+    "headline": "Relegation battle: 4 teams within 5pts of the drop",
+    "payload": {
+      "teams": [
+        { "name": "Bournemouth", "rank": 16, "points": 32, "form": "LLDLL", "goal_diff": -14 },
+        { "name": "Leicester", "rank": 17, "points": 30, "form": "DLLLD", "goal_diff": -18 },
+        { "name": "Leeds", "rank": 18, "points": 28, "form": "LLDLD", "goal_diff": -20 },
+        { "name": "Sheffield Utd", "rank": 19, "points": 20, "form": "LLLLL", "goal_diff": -35 }
+      ],
+      "cutoffRank": 18,
+      "gamesLeft": 6
+    },
+    "score": 60
+  },
+  "momentumStory": {
+    "type": "momentum",
+    "league_id": 39,
+    "headline": "Sheffield Utd on a 5-game losing streak",
+    "payload": {
+      "team": "Sheffield Utd",
+      "rank": 19,
+      "streakType": "cold",
+      "winsInLast5": 0,
+      "lossesInLast5": 5,
+      "gamesLeft": 6
+    },
+    "score": 55
+  },
+  "lowScoreStory": {
+    "type": "qualification",
+    "league_id": 39,
+    "headline": "Top 6 battle: 3 teams fighting for European spots",
+    "payload": {
+      "teams": [
+        { "name": "Tottenham", "rank": 4, "points": 60 },
+        { "name": "Aston Villa", "rank": 5, "points": 58 },
+        { "name": "Man United", "rank": 6, "points": 55 }
+      ],
+      "pointGap": 5,
+      "gamesLeft": 15
+    },
+    "score": 35
+  }
+}

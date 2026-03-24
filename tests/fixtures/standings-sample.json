@@ -1,0 +1,36 @@
+{
+  "premierLeague": {
+    "tightTitleRace": [
+      { "id": 1, "league_id": 39, "season": 2025, "team_id": 42, "team_name": "Arsenal", "team_logo": null, "rank": 1, "points": 76, "played": 32, "won": 23, "drawn": 7, "lost": 2, "goal_diff": 45, "form": "WWDWW", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 2, "league_id": 39, "season": 2025, "team_id": 50, "team_name": "Man City", "team_logo": null, "rank": 2, "points": 74, "played": 32, "won": 22, "drawn": 8, "lost": 2, "goal_diff": 42, "form": "WDWWW", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 3, "league_id": 39, "season": 2025, "team_id": 40, "team_name": "Liverpool", "team_logo": null, "rank": 3, "points": 73, "played": 32, "won": 22, "drawn": 7, "lost": 3, "goal_diff": 38, "form": "WLWWW", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 4, "league_id": 39, "season": 2025, "team_id": 47, "team_name": "Tottenham", "team_logo": null, "rank": 4, "points": 60, "played": 32, "won": 17, "drawn": 9, "lost": 6, "goal_diff": 20, "form": "DWLDW", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 5, "league_id": 39, "season": 2025, "team_id": 66, "team_name": "Aston Villa", "team_logo": null, "rank": 5, "points": 58, "played": 32, "won": 16, "drawn": 10, "lost": 6, "goal_diff": 15, "form": "WDWDL", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 6, "league_id": 39, "season": 2025, "team_id": 33, "team_name": "Man United", "team_logo": null, "rank": 6, "points": 55, "played": 32, "won": 15, "drawn": 10, "lost": 7, "goal_diff": 10, "form": "DWWLD", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 7, "league_id": 39, "season": 2025, "team_id": 34, "team_name": "Newcastle", "team_logo": null, "rank": 7, "points": 52, "played": 32, "won": 14, "drawn": 10, "lost": 8, "goal_diff": 8, "form": "WDLWW", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 8, "league_id": 39, "season": 2025, "team_id": 51, "team_name": "Brighton", "team_logo": null, "rank": 8, "points": 48, "played": 32, "won": 13, "drawn": 9, "lost": 10, "goal_diff": 5, "form": "LDWWL", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 9, "league_id": 39, "season": 2025, "team_id": 48, "team_name": "West Ham", "team_logo": null, "rank": 9, "points": 44, "played": 32, "won": 12, "drawn": 8, "lost": 12, "goal_diff": 2, "form": "LDWLL", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 10, "league_id": 39, "season": 2025, "team_id": 52, "team_name": "Crystal Palace", "team_logo": null, "rank": 10, "points": 42, "played": 32, "won": 11, "drawn": 9, "lost": 12, "goal_diff": -2, "form": "DLWDL", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 11, "league_id": 39, "season": 2025, "team_id": 55, "team_name": "Brentford", "team_logo": null, "rank": 11, "points": 40, "played": 32, "won": 10, "drawn": 10, "lost": 12, "goal_diff": -3, "form": "WLDDL", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 12, "league_id": 39, "season": 2025, "team_id": 39, "team_name": "Wolves", "team_logo": null, "rank": 12, "points": 38, "played": 32, "won": 10, "drawn": 8, "lost": 14, "goal_diff": -5, "form": "LLDWW", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 13, "league_id": 39, "season": 2025, "team_id": 45, "team_name": "Everton", "team_logo": null, "rank": 13, "points": 36, "played": 32, "won": 9, "drawn": 9, "lost": 14, "goal_diff": -8, "form": "LDDLW", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 14, "league_id": 39, "season": 2025, "team_id": 36, "team_name": "Fulham", "team_logo": null, "rank": 14, "points": 35, "played": 32, "won": 9, "drawn": 8, "lost": 15, "goal_diff": -10, "form": "DLLWL", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 15, "league_id": 39, "season": 2025, "team_id": 65, "team_name": "Nottm Forest", "team_logo": null, "rank": 15, "points": 33, "played": 32, "won": 8, "drawn": 9, "lost": 15, "goal_diff": -12, "form": "LLLWD", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 16, "league_id": 39, "season": 2025, "team_id": 35, "team_name": "Bournemouth", "team_logo": null, "rank": 16, "points": 32, "played": 32, "won": 8, "drawn": 8, "lost": 16, "goal_diff": -14, "form": "LLDLL", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 17, "league_id": 39, "season": 2025, "team_id": 46, "team_name": "Leicester", "team_logo": null, "rank": 17, "points": 30, "played": 32, "won": 7, "drawn": 9, "lost": 16, "goal_diff": -18, "form": "DLLLD", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 18, "league_id": 39, "season": 2025, "team_id": 63, "team_name": "Leeds", "team_logo": null, "rank": 18, "points": 28, "played": 32, "won": 6, "drawn": 10, "lost": 16, "goal_diff": -20, "form": "LLDLD", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 19, "league_id": 39, "season": 2025, "team_id": 62, "team_name": "Sheffield Utd", "team_logo": null, "rank": 19, "points": 20, "played": 32, "won": 4, "drawn": 8, "lost": 20, "goal_diff": -35, "form": "LLLLL", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 20, "league_id": 39, "season": 2025, "team_id": 44, "team_name": "Burnley", "team_logo": null, "rank": 20, "points": 15, "played": 32, "won": 3, "drawn": 6, "lost": 23, "goal_diff": -42, "form": "LLLLL", "fetched_at": "2025-04-01T10:00:00Z" }
+    ],
+    "noTitleRace": [
+      { "id": 1, "league_id": 39, "season": 2025, "team_id": 50, "team_name": "Man City", "team_logo": null, "rank": 1, "points": 85, "played": 32, "won": 27, "drawn": 4, "lost": 1, "goal_diff": 55, "form": "WWWWW", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 2, "league_id": 39, "season": 2025, "team_id": 42, "team_name": "Arsenal", "team_logo": null, "rank": 2, "points": 70, "played": 32, "won": 21, "drawn": 7, "lost": 4, "goal_diff": 35, "form": "WDWLW", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 3, "league_id": 39, "season": 2025, "team_id": 40, "team_name": "Liverpool", "team_logo": null, "rank": 3, "points": 65, "played": 32, "won": 19, "drawn": 8, "lost": 5, "goal_diff": 28, "form": "DWWDL", "fetched_at": "2025-04-01T10:00:00Z" }
+    ],
+    "twoTeamRace": [
+      { "id": 1, "league_id": 39, "season": 2025, "team_id": 42, "team_name": "Arsenal", "team_logo": null, "rank": 1, "points": 80, "played": 35, "won": 25, "drawn": 5, "lost": 5, "goal_diff": 40, "form": "WWWDW", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 2, "league_id": 39, "season": 2025, "team_id": 40, "team_name": "Liverpool", "team_logo": null, "rank": 2, "points": 79, "played": 35, "won": 24, "drawn": 7, "lost": 4, "goal_diff": 38, "form": "WWWWW", "fetched_at": "2025-04-01T10:00:00Z" },
+      { "id": 3, "league_id": 39, "season": 2025, "team_id": 50, "team_name": "Man City", "team_logo": null, "rank": 3, "points": 70, "played": 35, "won": 21, "drawn": 7, "lost": 7, "goal_diff": 30, "form": "WDLWW", "fetched_at": "2025-04-01T10:00:00Z" }
+    ]
+  }
+}
