@@ -10,6 +10,20 @@ export interface StructuredContent {
   edge: string | null;
 }
 
+export interface PostCandidate {
+  label: 'main' | 'data' | 'edge';
+  mainText: string;
+  hashtags: string[];
+  fullPostText: string;
+  charCount: number;
+  passesQualityGate: boolean;
+}
+
+export interface EnrichedContent {
+  candidates: PostCandidate[];
+  raw: StructuredContent;
+}
+
 // ── Publishing logic ────────────────────────────────────────────────────
 // MAIN  = the post. This is what gets published if approved.
 // DATA  = supporting alternative. Reviewer can swap it in.
