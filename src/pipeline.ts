@@ -6,10 +6,12 @@ import { saveFixtures } from './storage/fixtures-repo.js';
 import { insertStory, updateStoryContent } from './storage/stories-repo.js';
 import { detectStories } from './detection/detector.js';
 import { generateContent } from './content/generator.js';
-import { formatForTelegramHtml, type StructuredContent } from './content/formatter.js';
-import { sendStoryPreview } from './delivery/telegram.js';
+import { generateHashtags } from './content/hashtags.js';
+import { buildPostCandidates, formatForX } from './content/post-builder.js';
+import { sendStoryMessages } from './delivery/telegram.js';
 import { preFilter, postFilter } from './safety/filters.js';
 import type { ScoredStory } from './detection/detector.js';
+import type { EnrichedContent } from './content/formatter.js';
 
 export interface PipelineResult {
   fetched: number;
@@ -70,9 +72,27 @@ function detectAndFilter(): ScoredStory[] {
 
 // ── Step 3: Generate content ────────────────────────────────────────────
 
+function buildDataSummary(story: ScoredStory): string {
+  const payload = story.payload as Record<string, unknown>;
+  const parts: string[] = [];
+
+  const teams = payload.teams as Array<Record<string, unknown>> | undefined;
+  if (teams) {
+    parts.push(teams.map(t => `${t.name} ${t.points}pts`).join(' \u00B7 '));
+  }
+
+  if (payload.gamesLeft !== undefined) {
+    let line = `${payload.gamesLeft} games left`;
+    if (payload.pointGap !== undefined) line += ` \u00B7 ${payload.pointGap}pt gap`;
+    parts.push(line);
+  }
+
+  return parts.join('\n');
+}
+
 async function generateForStory(
   story: ScoredStory,
-): Promise<{ storyId: number; content: StructuredContent } | null> {
+): Promise<{ storyId: number; enriched: EnrichedContent } | null> {
   // Persist story shell first
   const storyId = insertStory({
     type: story.type,
@@ -85,18 +105,32 @@ async function generateForStory(
   try {
     const content = await generateContent(story);
 
-    // Post-generation quality check
-    const quality = postFilter(content);
+    // Build metadata (probability fields empty for now — Feature C ready)
+    const metadata = { hashtags: [] as string[] };
+
+    // Post-generation quality check (includes probability guard)
+    const quality = postFilter(content, metadata);
     if (!quality.passed) {
       logger.warn({ storyId, reason: quality.reason }, 'Content failed quality check');
       return null;
     }
 
-    // Persist content
-    const variants = [content.main, content.data, content.edge].filter(Boolean) as string[];
-    updateStoryContent(storyId, variants);
+    // Generate hashtags and build candidates
+    const hashtags = generateHashtags(story);
+    const candidates = buildPostCandidates(content, hashtags);
 
-    return { storyId, content };
+    const enriched: EnrichedContent = {
+      contentMode: 'short_post',
+      posts: candidates,
+      thread: null,
+      raw: content,
+      metadata: { hashtags },
+    };
+
+    // Persist enriched content
+    updateStoryContent(storyId, enriched);
+
+    return { storyId, enriched };
   } catch (err) {
     logger.error({ storyId, err }, 'Content generation failed');
     return null;
@@ -108,19 +142,22 @@ async function generateForStory(
 async function deliver(
   story: ScoredStory,
   storyId: number,
-  content: StructuredContent,
+  enriched: EnrichedContent,
 ): Promise<boolean> {
   const leagueName = config.leagues[story.league_id] || `League ${story.league_id}`;
-  const variants = [content.main, content.data, content.edge].filter(Boolean) as string[];
+
+  // Format candidates for X (presentation layer — computed, not stored)
+  const formatted = formatForX(enriched.posts);
 
   try {
-    await sendStoryPreview({
-      id: storyId,
+    await sendStoryMessages({
+      storyId,
       type: story.type,
       league: leagueName,
       headline: story.headline,
       score: story.score,
-      variants,
+      candidates: formatted,
+      dataSummary: buildDataSummary(story),
     });
     return true;
   } catch (err) {
@@ -177,7 +214,7 @@ export async function runPipeline(): Promise<PipelineResult> {
 
     result.generated++;
 
-    const sent = await deliver(story, generated.storyId, generated.content);
+    const sent = await deliver(story, generated.storyId, generated.enriched);
     if (sent) {
       result.delivered++;
     } else {

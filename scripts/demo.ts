@@ -3,7 +3,9 @@
  * No API keys needed.
  */
 import { buildPrompt } from '../src/content/prompts.js';
-import { formatForTelegram, type StructuredContent } from '../src/content/formatter.js';
+import type { StructuredContent } from '../src/content/formatter.js';
+import { generateHashtags } from '../src/content/hashtags.js';
+import { buildPostCandidates, formatForX } from '../src/content/post-builder.js';
 import { scoreStory } from '../src/detection/scorer.js';
 import type { ScoredStory } from '../src/detection/detector.js';
 import type { StandingRow } from '../src/storage/standings-repo.js';
@@ -63,9 +65,16 @@ function run() {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('  EXAMPLE 1: TITLE RACE');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-    console.log(formatForTelegram(scored, titleRaceContent));
+    const hashtags1 = generateHashtags(scored);
+    const candidates1 = buildPostCandidates(titleRaceContent, hashtags1);
+    const formatted1 = formatForX(candidates1);
+    for (const f of formatted1) {
+      console.log(`── ${f.label.toUpperCase()} POST (${f.charCount} chars) ──`);
+      console.log(f.fullPostText);
+      console.log('');
+    }
 
-    console.log('\n\n── PROMPT SENT TO LLM ──');
+    console.log('\n── PROMPT SENT TO LLM ──');
     const { user } = buildPrompt(scored);
     console.log(user);
   }
@@ -82,7 +91,14 @@ function run() {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('  EXAMPLE 2: RELEGATION');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-    console.log(formatForTelegram(scored, relegationContent));
+    const hashtags2 = generateHashtags(scored);
+    const candidates2 = buildPostCandidates(relegationContent, hashtags2);
+    const formatted2 = formatForX(candidates2);
+    for (const f of formatted2) {
+      console.log(`── ${f.label.toUpperCase()} POST (${f.charCount} chars) ──`);
+      console.log(f.fullPostText);
+      console.log('');
+    }
 
     console.log('\n\n── PROMPT SENT TO LLM ──');
     const { user } = buildPrompt(scored);

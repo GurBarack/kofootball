@@ -1,20 +1,32 @@
 import { config } from '../config.js';
 import { http } from '../utils/http.js';
 import { logger } from '../utils/logger.js';
-import type { StoryPreview, TelegramInlineButton } from './types.js';
+import { escapeHtml } from '../content/formatter.js';
+import type { StoryDeliveryPayload, TelegramInlineButton } from './types.js';
 
 const BASE_URL = `https://api.telegram.org/bot${config.telegram.botToken}`;
+const INTER_MESSAGE_DELAY_MS = 300;
 
 // ── Low-level send ──────────────────────────────────────────────────────
 
-export async function sendTextMessage(text: string): Promise<number> {
+export async function sendHtmlMessage(text: string): Promise<number> {
   const res = await http.post(`${BASE_URL}/sendMessage`, {
     chat_id: config.telegram.chatId,
     text,
     parse_mode: 'HTML',
   });
   const messageId = res.data?.result?.message_id;
-  logger.info({ messageId }, 'Text message sent');
+  logger.info({ messageId }, 'HTML message sent');
+  return messageId;
+}
+
+export async function sendPlainMessage(text: string): Promise<number> {
+  const res = await http.post(`${BASE_URL}/sendMessage`, {
+    chat_id: config.telegram.chatId,
+    text,
+  });
+  const messageId = res.data?.result?.message_id;
+  logger.info({ messageId }, 'Plain message sent');
   return messageId;
 }
 
@@ -33,9 +45,39 @@ export async function sendMessageWithButtons(
   return messageId;
 }
 
-// ── Story preview ───────────────────────────────────────────────────────
+// ── Story delivery ──────────────────────────────────────────────────────
 
-function buildStoryButtons(storyId: number | string): TelegramInlineButton[][] {
+const LABEL_DISPLAY: Record<string, string> = {
+  main: 'MAIN POST',
+  data: 'DATA POST',
+  edge: 'EDGE POST',
+};
+
+function buildOverviewMessage(payload: StoryDeliveryPayload): string {
+  const typeLabel = payload.type
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase());
+
+  let msg = '';
+  msg += `\uD83C\uDFC6 <b>${escapeHtml(payload.league.toUpperCase())}</b>`;
+  msg += ` | ${escapeHtml(typeLabel)}`;
+  msg += ` | Score: ${payload.score}`;
+  msg += ` | <code>#ID-${payload.storyId}</code>\n\n`;
+
+  if (payload.dataSummary) {
+    msg += `${escapeHtml(payload.dataSummary)}\n\n`;
+  }
+
+  msg += `\uD83D\uDCCA ${escapeHtml(payload.headline)}`;
+
+  if (payload.reasoning) {
+    msg += `\n\n\uD83D\uDCDD <i>${escapeHtml(payload.reasoning)}</i>`;
+  }
+
+  return msg.trim();
+}
+
+function buildStoryButtons(storyId: number): TelegramInlineButton[][] {
   return [[
     { text: '\u2705 Approve', callback_data: `approve:${storyId}` },
     { text: '\u274C Reject', callback_data: `reject:${storyId}` },
@@ -43,40 +85,42 @@ function buildStoryButtons(storyId: number | string): TelegramInlineButton[][] {
   ]];
 }
 
-function formatStoryPreview(story: StoryPreview): string {
-  const typeLabel = story.type
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase());
+function delay(ms: number): Promise<void> {
+  return new Promise(r => setTimeout(r, ms));
+}
 
-  let msg = '';
-  msg += `\uD83C\uDFC6 <b>${story.league.toUpperCase()}</b> | ${typeLabel} | Score: ${story.score}\n\n`;
-  msg += `\uD83D\uDCCA ${escapeHtml(story.headline)}\n\n`;
+export async function sendStoryMessages(
+  payload: StoryDeliveryPayload,
+): Promise<number[]> {
+  const messageIds: number[] = [];
 
-  story.variants.forEach((v, i) => {
-    msg += `\uD83D\uDCAC <b>Variant ${i + 1}:</b>\n${escapeHtml(v)}\n\n`;
-  });
+  logger.info(
+    { type: payload.type, score: payload.score, storyId: payload.storyId },
+    'Sending story messages',
+  );
 
-  if (story.reasoning) {
-    msg += `\uD83D\uDCDD <i>${escapeHtml(story.reasoning)}</i>\n`;
+  // Message 1: Overview with buttons
+  const overviewText = buildOverviewMessage(payload);
+  const buttons = buildStoryButtons(payload.storyId);
+  const overviewId = await sendMessageWithButtons(overviewText, buttons);
+  messageIds.push(overviewId);
+
+  // Messages 2-4: Post options (plain text, copy-friendly)
+  for (const candidate of payload.candidates) {
+    if (!candidate.passesQualityGate) continue;
+
+    await delay(INTER_MESSAGE_DELAY_MS);
+
+    const label = LABEL_DISPLAY[candidate.label] || candidate.label.toUpperCase();
+    const postText = `${label}\n\n${candidate.fullPostText}`;
+    const msgId = await sendPlainMessage(postText);
+    messageIds.push(msgId);
   }
 
-  return msg.trim();
-}
+  logger.info(
+    { storyId: payload.storyId, messageCount: messageIds.length },
+    'Story messages sent',
+  );
 
-export async function sendStoryPreview(story: StoryPreview): Promise<number> {
-  const text = formatStoryPreview(story);
-  const storyId = story.id ?? Date.now();
-  const buttons = buildStoryButtons(storyId);
-
-  logger.info({ type: story.type, score: story.score, storyId }, 'Sending story preview');
-  return sendMessageWithButtons(text, buttons);
-}
-
-// ── Utility ─────────────────────────────────────────────────────────────
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return messageIds;
 }

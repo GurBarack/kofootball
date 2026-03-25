@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { passesScoreThreshold, passesContentQuality } from '../../src/safety/filters.js';
 import type { ScoredStory } from '../../src/detection/detector.js';
-import type { StructuredContent } from '../../src/content/formatter.js';
+import type { StructuredContent, ContentMetadata } from '../../src/content/formatter.js';
 import storySamples from '../fixtures/stories-sample.json';
 
 function makeStory(overrides: Partial<ScoredStory> = {}): ScoredStory {
@@ -110,6 +110,54 @@ describe('passesContentQuality', () => {
 
   it('allows content with null edge', () => {
     const content = makeContent({ edge: null });
+    const result = passesContentQuality(content);
+    expect(result.ok).toBe(true);
+  });
+
+  // ── Probability guard ─────────────────────────────────────────────
+
+  it('rejects "34%" when no probability data', () => {
+    const content = makeContent({
+      main: 'Arsenal have a 34% chance of winning the title. Their form has been relentless this season.',
+    });
+    const result = passesContentQuality(content);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/probability/i);
+  });
+
+  it('rejects "12pp" when no probability data', () => {
+    const content = makeContent({
+      data: 'Their title probability jumped by 12pp after the win on Saturday against their rivals.',
+    });
+    const result = passesContentQuality(content);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/probability/i);
+  });
+
+  it('allows "34%" when probability data is present', () => {
+    const content = makeContent({
+      main: 'Arsenal have a 34% chance of winning the title. Their form has been relentless this season.',
+    });
+    const metadata: ContentMetadata = {
+      hashtags: [],
+      probability: { before: 22, after: 34, deltaPp: 12, source: 'model' },
+    };
+    const result = passesContentQuality(content, metadata);
+    expect(result.ok).toBe(true);
+  });
+
+  it('allows qualitative "chances are fading" without probability data', () => {
+    const content = makeContent({
+      main: "City's title chances are fading fast. Three losses in five have left them needing results elsewhere.",
+    });
+    const result = passesContentQuality(content);
+    expect(result.ok).toBe(true);
+  });
+
+  it('allows "odds of surviving" without probability data', () => {
+    const content = makeContent({
+      main: 'The odds of surviving look bleak for Leicester. Form and fixtures both point down this season.',
+    });
     const result = passesContentQuality(content);
     expect(result.ok).toBe(true);
   });

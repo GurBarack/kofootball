@@ -2,7 +2,7 @@ import { config } from '../config.js';
 import { getRecentStories } from '../storage/stories-repo.js';
 import { logger } from '../utils/logger.js';
 import type { ScoredStory } from '../detection/detector.js';
-import type { StructuredContent } from '../content/formatter.js';
+import type { StructuredContent, ContentMetadata } from '../content/formatter.js';
 
 // ── Score threshold ─────────────────────────────────────────────────────
 
@@ -41,7 +41,27 @@ export function isDuplicate(story: ScoredStory): boolean {
 const MIN_MAIN_LENGTH = 60;
 const MAX_MAIN_LENGTH = 600;
 
-export function passesContentQuality(content: StructuredContent): { ok: boolean; reason?: string } {
+// ── Probability guard ───────────────────────────────────────────────
+// Block explicit numerical probability claims when no probability data exists.
+// Qualitative language ("chances are fading") is allowed — only quantitative
+// claims that imply a calculation happened are blocked.
+
+const PROBABILITY_PATTERNS = [
+  /\d+\s*%/,           // "34%", "34 %"
+  /\d+\s*percent/i,    // "34 percent"
+  /\d+\s*pp\b/i,       // "12pp" (percentage points)
+];
+
+function hasProbabilityData(metadata?: ContentMetadata): boolean {
+  if (!metadata?.probability) return false;
+  const p = metadata.probability;
+  return p.before != null || p.after != null || p.deltaPp != null;
+}
+
+export function passesContentQuality(
+  content: StructuredContent,
+  metadata?: ContentMetadata,
+): { ok: boolean; reason?: string } {
   if (!content.main || content.main.length < MIN_MAIN_LENGTH) {
     return { ok: false, reason: `MAIN too short (${content.main?.length || 0} chars, min ${MIN_MAIN_LENGTH})` };
   }
@@ -58,6 +78,16 @@ export function passesContentQuality(content: StructuredContent): { ok: boolean;
   for (const phrase of banned) {
     if (combined.includes(phrase)) {
       return { ok: false, reason: `Contains banned phrase: "${phrase}"` };
+    }
+  }
+
+  // Probability guard: block numerical claims without probability data
+  if (!hasProbabilityData(metadata)) {
+    const combined = `${content.main} ${content.data} ${content.edge || ''}`;
+    for (const pattern of PROBABILITY_PATTERNS) {
+      if (pattern.test(combined)) {
+        return { ok: false, reason: 'Numerical probability claim without probability data' };
+      }
     }
   }
 
@@ -83,8 +113,8 @@ export function preFilter(story: ScoredStory): FilterResult {
 }
 
 /** Post-generation filter: content quality */
-export function postFilter(content: StructuredContent): FilterResult {
-  const quality = passesContentQuality(content);
+export function postFilter(content: StructuredContent, metadata?: ContentMetadata): FilterResult {
+  const quality = passesContentQuality(content, metadata);
   if (!quality.ok) {
     return { passed: false, reason: quality.reason };
   }
