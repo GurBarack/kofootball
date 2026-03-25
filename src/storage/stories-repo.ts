@@ -1,4 +1,5 @@
 import { getDb } from './db.js';
+import type { EnrichedContent } from '../content/formatter.js';
 
 export interface StoryRow {
   id: number;
@@ -38,10 +39,34 @@ export function insertStory(story: NewStory): number {
   return Number(result.lastInsertRowid);
 }
 
-export function updateStoryContent(id: number, variants: string[]): void {
+export function updateStoryContent(id: number, enriched: EnrichedContent): void {
   const db = getDb();
   db.prepare(`UPDATE stories SET content_variants = ? WHERE id = ?`)
-    .run(JSON.stringify(variants), id);
+    .run(JSON.stringify(enriched), id);
+}
+
+/** Parse stored content — handles both old string[] format and new EnrichedContent */
+export function parseStoredContent(row: StoryRow): EnrichedContent | null {
+  if (!row.content_variants) return null;
+  const parsed = JSON.parse(row.content_variants);
+
+  // Old format: string[] (backward compat)
+  if (Array.isArray(parsed)) {
+    const [main, data, edge] = parsed as string[];
+    return {
+      contentMode: 'short_post',
+      posts: [
+        { label: 'main', mainText: main || '', hashtags: [] },
+        { label: 'data', mainText: data || '', hashtags: [] },
+        ...(edge ? [{ label: 'edge' as const, mainText: edge, hashtags: [] }] : []),
+      ],
+      thread: null,
+      raw: { main: main || '', data: data || '', edge: edge || null },
+      metadata: { hashtags: [] },
+    };
+  }
+
+  return parsed as EnrichedContent;
 }
 
 export function getLastStoryForLeague(leagueId: number): StoryRow | undefined {

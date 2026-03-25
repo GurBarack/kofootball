@@ -7,7 +7,9 @@ import { config } from '../src/config.js';
 import { getDb } from '../src/storage/db.js';
 import { detectStories } from '../src/detection/detector.js';
 import { preFilter, postFilter } from '../src/safety/filters.js';
-import { parseVariants, formatForTelegramHtml, type StructuredContent } from '../src/content/formatter.js';
+import { parseVariants, type StructuredContent } from '../src/content/formatter.js';
+import { generateHashtags } from '../src/content/hashtags.js';
+import { buildPostCandidates, formatForX } from '../src/content/post-builder.js';
 import type { ScoredStory } from '../src/detection/detector.js';
 
 // ── Seed PL + La Liga into DB ───────────────────────────────────────────
@@ -231,10 +233,15 @@ function run() {
   let deliveryRank = 1;
   for (const { story, content } of ready) {
     console.log(`  ┌─ Delivery #${deliveryRank} ─────────────────────────────────────────┐`);
-    const formatted = formatForTelegramHtml(story, content);
-    // Indent each line of formatted output
-    for (const line of formatted.split('\n')) {
-      console.log(`  │ ${line}`);
+    const hashtags = generateHashtags(story);
+    const candidates = buildPostCandidates(content, hashtags);
+    const formatted = formatForX(candidates);
+    for (const f of formatted) {
+      console.log(`  │ [${f.label.toUpperCase()} POST] (${f.charCount} chars)`);
+      for (const line of f.fullPostText.split('\n')) {
+        console.log(`  │   ${line}`);
+      }
+      console.log(`  │`);
     }
     console.log('  └─────────────────────────────────────────────────────────┘\n');
     deliveryRank++;

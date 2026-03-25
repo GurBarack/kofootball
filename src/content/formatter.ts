@@ -1,6 +1,3 @@
-import { config } from '../config.js';
-import type { ScoredStory } from '../detection/detector.js';
-
 export interface StructuredContent {
   /** Default post candidate. Always shown. */
   main: string;
@@ -10,18 +7,44 @@ export interface StructuredContent {
   edge: string | null;
 }
 
-export interface PostCandidate {
-  label: 'main' | 'data' | 'edge';
+// ── Data layer types (stored in DB) ─────────────────────────────────
+
+/** Atomic content unit — one tweet-sized text with associated hashtags */
+export interface ContentPiece {
   mainText: string;
   hashtags: string[];
-  fullPostText: string;
-  charCount: number;
-  passesQualityGate: boolean;
 }
 
+/** A labeled single-post option */
+export interface PostCandidate extends ContentPiece {
+  label: 'main' | 'data' | 'edge';
+}
+
+/** Thread: ordered sequence of tweets (Feature B, null until then) */
+export interface ThreadCandidate {
+  tweets: ContentPiece[];
+}
+
+/** Shared metadata across all content for a story */
+export interface ContentMetadata {
+  hashtags: string[];
+  probability?: {
+    before?: number | null;
+    after?: number | null;
+    deltaPp?: number | null;
+    source?: string | null;
+  };
+}
+
+export type ContentMode = 'short_post' | 'thread';
+
+/** The stored content envelope */
 export interface EnrichedContent {
-  candidates: PostCandidate[];
+  contentMode: ContentMode;
+  posts: PostCandidate[];
+  thread: ThreadCandidate | null;
   raw: StructuredContent;
+  metadata: ContentMetadata;
 }
 
 // ── Publishing logic ────────────────────────────────────────────────────
@@ -88,84 +111,8 @@ function isEdgeWorthShowing(edge: string, main: string): boolean {
   return true;
 }
 
-// ── Plain text format (for demo/logging) ────────────────────────────────
+// ── HTML escape helper (used by delivery layer) ─────────────────────────
 
-export function formatForTelegram(story: ScoredStory, content: StructuredContent): string {
-  const leagueName = config.leagues[story.league_id] || `League ${story.league_id}`;
-  const typeLabel = story.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  const payload = story.payload as Record<string, unknown>;
-
-  let msg = '';
-
-  // Header
-  msg += `\uD83C\uDFC6 ${leagueName.toUpperCase()} | ${typeLabel} | Score: ${story.score}\n`;
-  msg += `\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n`;
-
-  // Main take — the post candidate
-  msg += `\u25B6\uFE0F POST CANDIDATE:\n`;
-  msg += `${content.main}\n\n`;
-
-  // Alternatives — supporting, not equal
-  msg += `\u2500\u2500\u2500 alternatives \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n`;
-  msg += `\uD83D\uDCC8 Data angle:\n${content.data}\n\n`;
-
-  if (content.edge) {
-    msg += `\uD83D\uDD25 Edge:\n${content.edge}\n\n`;
-  }
-
-  // Data footer
-  msg += `\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n`;
-  const teams = payload.teams as Array<Record<string, unknown>> | undefined;
-  if (teams) {
-    const summary = teams.map(t => `${t.name} ${t.points}pts`).join(' \u00B7 ');
-    msg += `${summary}\n`;
-  }
-  if (payload.gamesLeft !== undefined) {
-    msg += `${payload.gamesLeft} games left`;
-    if (payload.pointGap !== undefined) msg += ` \u00B7 ${payload.pointGap}pt gap`;
-    msg += '\n';
-  }
-
-  return msg.trim();
-}
-
-// ── HTML format (for Telegram delivery) ─────────────────────────────────
-
-export function formatForTelegramHtml(story: ScoredStory, content: StructuredContent): string {
-  const leagueName = config.leagues[story.league_id] || `League ${story.league_id}`;
-  const typeLabel = story.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  const payload = story.payload as Record<string, unknown>;
-
-  let msg = '';
-  msg += `\uD83C\uDFC6 <b>${esc(leagueName.toUpperCase())}</b> | ${esc(typeLabel)} | Score: ${story.score}\n\n`;
-
-  // Main take — bold, visually dominant
-  msg += `\u25B6\uFE0F <b>POST CANDIDATE</b>\n`;
-  msg += `<b>${esc(content.main)}</b>\n\n`;
-
-  // Alternatives — lighter weight
-  msg += `\u2500\u2500\u2500 <i>alternatives</i> \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n`;
-  msg += `\uD83D\uDCC8 <i>Data angle:</i>\n${esc(content.data)}\n\n`;
-
-  if (content.edge) {
-    msg += `\uD83D\uDD25 <i>Edge:</i>\n${esc(content.edge)}\n\n`;
-  }
-
-  // Data footer
-  const teams = payload.teams as Array<Record<string, unknown>> | undefined;
-  if (teams) {
-    const summary = teams.map(t => `${t.name} ${t.points}pts`).join(' \u00B7 ');
-    msg += `<code>${esc(summary)}</code>\n`;
-  }
-  if (payload.gamesLeft !== undefined) {
-    let footer = `${payload.gamesLeft} games left`;
-    if (payload.pointGap !== undefined) footer += ` \u00B7 ${payload.pointGap}pt gap`;
-    msg += `<code>${esc(footer)}</code>`;
-  }
-
-  return msg.trim();
-}
-
-function esc(text: string): string {
+export function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
