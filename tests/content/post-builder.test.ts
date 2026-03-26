@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPostCandidates, formatForX } from '../../src/content/post-builder.js';
+import { buildPostCandidates, formatForX, formatForTelegram } from '../../src/content/post-builder.js';
 import type { StructuredContent } from '../../src/content/formatter.js';
 
 const HASHTAGS = ['#PremierLeague', '#Arsenal', '#ManCity', '#TitleRace'];
@@ -97,6 +97,57 @@ describe('formatForX', () => {
   it('handles empty hashtags', () => {
     const candidates = buildPostCandidates(content, []);
     const formatted = formatForX(candidates);
+
+    expect(formatted[0].fullPostText).toBe(content.main);
+    expect(formatted[0].hashtags).toEqual([]);
+  });
+});
+
+describe('formatForTelegram', () => {
+  it('composes fullPostText with hashtags', () => {
+    const candidates = buildPostCandidates(content, HASHTAGS);
+    const formatted = formatForTelegram(candidates);
+
+    expect(formatted[0].fullPostText).toBe(
+      `${content.main}\n\n${HASHTAGS.join(' ')}`,
+    );
+  });
+
+  it('does NOT trim hashtags even when text is long', () => {
+    const longText = 'A'.repeat(300);
+    const longContent: StructuredContent = { main: longText, data: 'Short.', edge: null };
+    const candidates = buildPostCandidates(longContent, HASHTAGS);
+    const formatted = formatForTelegram(candidates);
+
+    const mainPost = formatted[0];
+    expect(mainPost.hashtags).toEqual(HASHTAGS);
+    expect(mainPost.fullPostText).toBe(`${longText}\n\n${HASHTAGS.join(' ')}`);
+    expect(mainPost.charCount).toBeGreaterThan(270);
+  });
+
+  it('passesQualityGate is always true regardless of length', () => {
+    const hugeText = 'A'.repeat(500);
+    const hugeContent: StructuredContent = { main: hugeText, data: 'Short.', edge: null };
+    const candidates = buildPostCandidates(hugeContent, HASHTAGS);
+    const formatted = formatForTelegram(candidates);
+
+    for (const f of formatted) {
+      expect(f.passesQualityGate).toBe(true);
+    }
+  });
+
+  it('charCount matches fullPostText length', () => {
+    const candidates = buildPostCandidates(content, HASHTAGS);
+    const formatted = formatForTelegram(candidates);
+
+    for (const f of formatted) {
+      expect(f.charCount).toBe(f.fullPostText.length);
+    }
+  });
+
+  it('handles empty hashtags', () => {
+    const candidates = buildPostCandidates(content, []);
+    const formatted = formatForTelegram(candidates);
 
     expect(formatted[0].fullPostText).toBe(content.main);
     expect(formatted[0].hashtags).toEqual([]);

@@ -7,7 +7,7 @@ import { insertStory, updateStoryContent } from './storage/stories-repo.js';
 import { detectStories } from './detection/detector.js';
 import { generateContent } from './content/generator.js';
 import { generateHashtags } from './content/hashtags.js';
-import { buildPostCandidates, formatForX } from './content/post-builder.js';
+import { buildPostCandidates, formatForTelegram } from './content/post-builder.js';
 import { sendStoryMessages } from './delivery/telegram.js';
 import { preFilter, postFilter } from './safety/filters.js';
 import type { ScoredStory } from './detection/detector.js';
@@ -147,7 +147,7 @@ async function deliver(
   const leagueName = config.leagues[story.league_id] || `League ${story.league_id}`;
 
   // Format candidates for X (presentation layer — computed, not stored)
-  const formatted = formatForX(enriched.posts);
+  const formatted = formatForTelegram(enriched.posts);
 
   try {
     await sendStoryMessages({

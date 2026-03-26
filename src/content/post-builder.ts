@@ -38,6 +38,20 @@ function composeFullText(mainText: string, hashtags: string[]): string {
   return `${mainText}\n\n${hashtags.join(' ')}`;
 }
 
+export function formatForTelegram(candidates: PostCandidate[]): FormattedPost[] {
+  return candidates.map(candidate => {
+    const fullPostText = composeFullText(candidate.mainText, candidate.hashtags);
+    return {
+      label: candidate.label,
+      mainText: candidate.mainText,
+      hashtags: [...candidate.hashtags],
+      fullPostText,
+      charCount: fullPostText.length,
+      passesQualityGate: true,
+    };
+  });
+}
+
 export function formatForX(candidates: PostCandidate[]): FormattedPost[] {
   return candidates.map(candidate => {
     let hashtags = [...candidate.hashtags];
