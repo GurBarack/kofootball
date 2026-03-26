@@ -67,12 +67,11 @@ export function detectStories(): ScoredStory[] {
     allStories.push(...scored);
   }
 
-  // Sort by score descending, cap at maxStoriesPerRun
+  // Sort by score descending — selection/capping is done by the selector
   allStories.sort((a, b) => b.score - a.score);
-  const capped = allStories.slice(0, config.maxStoriesPerRun);
 
-  logger.info({ detected: allStories.length, returned: capped.length }, 'Detection complete');
-  return capped;
+  logger.info({ detected: allStories.length }, 'Detection complete');
+  return allStories;
 }
 
 function isLeagueOnCooldown(leagueId: number): boolean {

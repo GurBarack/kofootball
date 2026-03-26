@@ -52,6 +52,15 @@ export const config = {
   minScoreThreshold: 50,
   leagueCooldownHours: 12,
 
+  selection: {
+    teamCooldownHours: 6,
+    teamCooldownPenalty: 15,
+    narrativeCooldownHours: 12,
+    narrativeOverlapThreshold: 0.5,
+    compositeWeightScore: 0.5,
+    compositeWeightNarrative: 0.5,
+  },
+
   // Supported leagues (full catalog — enabledLeagues controls which are active)
   leagues: {
     39: 'Premier League',

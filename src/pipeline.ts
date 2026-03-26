@@ -3,14 +3,16 @@ import { logger } from './utils/logger.js';
 import { fetchStandings, fetchRecentFixtures, fetchUpcomingFixtures, getRequestCount } from './fetcher/football-data.js';
 import { saveStandings } from './storage/standings-repo.js';
 import { saveFixtures } from './storage/fixtures-repo.js';
-import { insertStory, updateStoryContent } from './storage/stories-repo.js';
+import { insertStory, updateStoryContent, getRecentStories } from './storage/stories-repo.js';
 import { detectStories } from './detection/detector.js';
 import { generateContent } from './content/generator.js';
 import { generateHashtags } from './content/hashtags.js';
 import { buildPostCandidates, formatForTelegram } from './content/post-builder.js';
 import { sendStoryMessages } from './delivery/telegram.js';
 import { preFilter, postFilter } from './safety/filters.js';
+import { selectForPublishing } from './selection/selector.js';
 import type { ScoredStory } from './detection/detector.js';
+import type { PublishableStory } from './selection/selector.js';
 import type { EnrichedContent } from './content/formatter.js';
 
 export interface PipelineResult {
@@ -91,7 +93,7 @@ function buildDataSummary(story: ScoredStory): string {
 }
 
 async function generateForStory(
-  story: ScoredStory,
+  story: PublishableStory,
 ): Promise<{ storyId: number; enriched: EnrichedContent } | null> {
   // Persist story shell first
   const storyId = insertStory({
@@ -120,7 +122,7 @@ async function generateForStory(
     const candidates = buildPostCandidates(content, hashtags);
 
     const enriched: EnrichedContent = {
-      contentMode: 'short_post',
+      contentMode: story.contentMode,
       posts: candidates,
       thread: null,
       raw: content,
@@ -140,7 +142,7 @@ async function generateForStory(
 // ── Step 4: Deliver to Telegram ─────────────────────────────────────────
 
 async function deliver(
-  story: ScoredStory,
+  story: PublishableStory,
   storyId: number,
   enriched: EnrichedContent,
 ): Promise<boolean> {
@@ -190,17 +192,12 @@ export async function runPipeline(): Promise<PipelineResult> {
   const allFiltered = detectAndFilter();
   result.detected = allFiltered.length;
 
-  // Cap to maxStoriesPerRun — only the top-scoring stories get delivered
-  const stories = allFiltered.slice(0, config.maxStoriesPerRun);
-  if (allFiltered.length > stories.length) {
-    logger.info(
-      { total: allFiltered.length, delivering: stories.length, cap: config.maxStoriesPerRun },
-      'Capped stories to maxStoriesPerRun',
-    );
-  }
+  // 2b. Select stories for publishing (editorial layer)
+  const recentStories = getRecentStories(24);
+  const stories = selectForPublishing(allFiltered, recentStories, config.maxStoriesPerRun);
 
   if (stories.length === 0) {
-    logger.info('No stories passed filters. Pipeline done.');
+    logger.info('No stories selected for publishing. Pipeline done.');
     return result;
   }
 
