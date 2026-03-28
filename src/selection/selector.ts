@@ -1,8 +1,10 @@
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { computeBuzzBoost } from '../news/signals.js';
 import type { ScoredStory } from '../detection/detector.js';
 import type { StoryRow } from '../storage/stories-repo.js';
 import type { ContentMode } from '../content/formatter.js';
+import type { NewsSignals } from '../news/signals.js';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -207,6 +209,7 @@ export function selectForPublishing(
   candidates: ScoredStory[],
   recentStories: StoryRow[],
   maxStories: number,
+  newsSignals?: NewsSignals,
 ): PublishableStory[] {
   const { teamCooldownHours, teamCooldownPenalty, narrativeCooldownHours, narrativeOverlapThreshold } = config.selection;
 
@@ -217,11 +220,14 @@ export function selectForPublishing(
       + config.selection.compositeWeightNarrative * narrativeStrength;
 
     const penalties: string[] = [];
+    const storyTeams = extractTeamNames(story);
+
+    // 1b. News buzz boost (additive, 0-15)
+    const { boost: buzzBoost, topTeam: buzzTeam } = computeBuzzBoost(storyTeams, newsSignals);
+    compositeRank += buzzBoost;
 
     // 2. Team cooldown (soft): penalize if primary teams appeared recently
-    const storyTeams = extractTeamNames(story);
     const cooldownCutoff = Date.now() - teamCooldownHours * 60 * 60 * 1000;
-    let teamCooldownApplied = false;
 
     for (const recent of recentStories) {
       const recentTime = new Date(recent.created_at).getTime();
@@ -230,7 +236,6 @@ export function selectForPublishing(
       const recentTeams = extractTeamNamesFromRow(recent);
       if (teamOverlapRatio(storyTeams, recentTeams) > narrativeOverlapThreshold) {
         compositeRank -= teamCooldownPenalty;
-        teamCooldownApplied = true;
         penalties.push(`team_cooldown:-${teamCooldownPenalty} (overlap with story #${recent.id})`);
         break; // apply once
       }
@@ -250,6 +255,8 @@ export function selectForPublishing(
       headline: story.headline,
       score: story.score,
       narrativeStrength,
+      newsBuzz: buzzBoost,
+      buzzTeam,
       penalties: penalties.length > 0 ? penalties : 'none',
       compositeRank: Math.round(compositeRank * 10) / 10,
       teams: storyTeams,

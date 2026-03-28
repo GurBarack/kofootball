@@ -61,6 +61,14 @@ export const config = {
     compositeWeightNarrative: 0.5,
   },
 
+  news: {
+    enabled: true,
+    maxArticleAgeHours: 12,
+    fetchTimeoutMs: 5000,
+    buzzScoreCap: 20,
+    buzzBoostMax: 15,
+  },
+
   // Supported leagues (full catalog — enabledLeagues controls which are active)
   leagues: {
     39: 'Premier League',

@@ -11,8 +11,11 @@ import { buildPostCandidates, formatForTelegram } from './content/post-builder.j
 import { sendStoryMessages } from './delivery/telegram.js';
 import { preFilter, postFilter } from './safety/filters.js';
 import { selectForPublishing } from './selection/selector.js';
+import { fetchNewsWithStats } from './news/fetch-sources.js';
+import { extractSignals } from './news/signals.js';
 import type { ScoredStory } from './detection/detector.js';
 import type { PublishableStory } from './selection/selector.js';
+import type { NewsSignals } from './news/signals.js';
 import type { EnrichedContent } from './content/formatter.js';
 
 export interface PipelineResult {
@@ -188,13 +191,30 @@ export async function runPipeline(): Promise<PipelineResult> {
     return result;
   }
 
+  // 1b. Fetch news signals (best-effort)
+  let newsSignals: NewsSignals | undefined;
+  if (config.news.enabled) {
+    try {
+      const { items, sourcesOk, sourcesTotal } = await fetchNewsWithStats();
+      newsSignals = extractSignals(items, sourcesOk, sourcesTotal);
+      logger.info({
+        articles: items.length,
+        sourcesOk: newsSignals.sourcesOk,
+        sourcesTotal: newsSignals.sourcesTotal,
+        teamsWithBuzz: newsSignals.teamBuzz.size,
+      }, 'News signals fetched');
+    } catch (err) {
+      logger.warn({ err }, 'News fetch failed — continuing without signals');
+    }
+  }
+
   // 2. Detect + filter
   const allFiltered = detectAndFilter();
   result.detected = allFiltered.length;
 
   // 2b. Select stories for publishing (editorial layer)
   const recentStories = getRecentStories(24);
-  const stories = selectForPublishing(allFiltered, recentStories, config.maxStoriesPerRun);
+  const stories = selectForPublishing(allFiltered, recentStories, config.maxStoriesPerRun, newsSignals);
 
   if (stories.length === 0) {
     logger.info('No stories selected for publishing. Pipeline done.');
