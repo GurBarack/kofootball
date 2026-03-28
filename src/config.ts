@@ -70,6 +70,14 @@ export const config = {
     signalBoostMax: 10,
   },
 
+  threads: {
+    maxPerDay: 1,
+    minTweets: 4,
+    maxTweets: 8,
+    maxTweetChars: 280,
+    openingMaxChars: 260,
+  },
+
   // Supported leagues (full catalog — enabledLeagues controls which are active)
   leagues: {
     39: 'Premier League',

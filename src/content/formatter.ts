@@ -111,6 +111,25 @@ function isEdgeWorthShowing(edge: string, main: string): boolean {
   return true;
 }
 
+// ── Thread parsing ─────────────────────────────────────────────────────
+
+/**
+ * Parse LLM thread output into ContentPiece[].
+ * Expects TWEET 1: / TWEET 2: / ... markers.
+ */
+export function parseThread(raw: string): ContentPiece[] {
+  const tweets: ContentPiece[] = [];
+  const parts = raw.split(/TWEET\s+\d+:\s*/i);
+
+  for (const part of parts) {
+    const text = part.trim().replace(/\n+/g, ' ').trim();
+    if (!text) continue;
+    tweets.push({ mainText: text, hashtags: [] });
+  }
+
+  return tweets;
+}
+
 // ── HTML escape helper (used by delivery layer) ─────────────────────────
 
 export function escapeHtml(text: string): string {

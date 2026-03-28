@@ -5,11 +5,11 @@ import { saveStandings } from './storage/standings-repo.js';
 import { saveFixtures } from './storage/fixtures-repo.js';
 import { insertStory, updateStoryContent, getRecentStories } from './storage/stories-repo.js';
 import { detectStories } from './detection/detector.js';
-import { generateContent } from './content/generator.js';
+import { generateContent, generateThread } from './content/generator.js';
 import { generateHashtags } from './content/hashtags.js';
 import { buildPostCandidates, formatForTelegram } from './content/post-builder.js';
-import { sendStoryMessages } from './delivery/telegram.js';
-import { preFilter, postFilter } from './safety/filters.js';
+import { sendStoryMessages, sendThreadPreview } from './delivery/telegram.js';
+import { preFilter, postFilter, passesThreadQuality } from './safety/filters.js';
 import { selectForPublishing } from './selection/selector.js';
 import { fetchNewsWithStats } from './news/fetch-sources.js';
 import { extractSignals } from './news/signals.js';
@@ -108,10 +108,36 @@ async function generateForStory(
   });
 
   try {
-    const content = await generateContent(story);
+    // Generate hashtags early — used by both paths
+    const hashtags = generateHashtags(story);
+    const metadata = { hashtags };
 
-    // Build metadata (probability fields empty for now — Feature C ready)
-    const metadata = { hashtags: [] as string[] };
+    // Thread path
+    if (story.contentMode === 'thread') {
+      const tweets = await generateThread(story);
+      if (tweets) {
+        const threadQuality = passesThreadQuality(tweets, metadata);
+        if (threadQuality.passed) {
+          const enriched: EnrichedContent = {
+            contentMode: 'thread',
+            posts: [],
+            thread: { tweets },
+            raw: { main: '', data: '', edge: null },
+            metadata,
+          };
+          updateStoryContent(storyId, enriched);
+          return { storyId, enriched };
+        }
+        logger.warn({ storyId, reason: threadQuality.reason }, 'Thread failed quality — falling back to short_post');
+      } else {
+        logger.warn({ storyId }, 'Thread generation returned null — falling back to short_post');
+      }
+      // Fallback: continue to short_post generation below
+      story.contentMode = 'short_post';
+    }
+
+    // Short post path (default + thread fallback)
+    const content = await generateContent(story);
 
     // Post-generation quality check (includes probability guard)
     const quality = postFilter(content, metadata);
@@ -120,16 +146,14 @@ async function generateForStory(
       return null;
     }
 
-    // Generate hashtags and build candidates
-    const hashtags = generateHashtags(story);
     const candidates = buildPostCandidates(content, hashtags);
 
     const enriched: EnrichedContent = {
-      contentMode: story.contentMode,
+      contentMode: 'short_post',
       posts: candidates,
       thread: null,
       raw: content,
-      metadata: { hashtags },
+      metadata,
     };
 
     // Persist enriched content
@@ -151,10 +175,16 @@ async function deliver(
 ): Promise<boolean> {
   const leagueName = config.leagues[story.league_id] || `League ${story.league_id}`;
 
-  // Format candidates for X (presentation layer — computed, not stored)
-  const formatted = formatForTelegram(enriched.posts);
-
   try {
+    // Thread delivery
+    if (enriched.contentMode === 'thread' && enriched.thread) {
+      await sendThreadPreview(storyId, enriched.thread.tweets, enriched.metadata.hashtags);
+      return true;
+    }
+
+    // Short post delivery (default)
+    const formatted = formatForTelegram(enriched.posts);
+
     await sendStoryMessages({
       storyId,
       type: story.type,

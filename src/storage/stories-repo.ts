@@ -87,3 +87,13 @@ export function getRecentStories(hours = 24): StoryRow[] {
     ORDER BY score DESC
   `).all(`-${hours}`) as StoryRow[];
 }
+
+export function getRecentThreadCount(hours: number): number {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT COUNT(*) as cnt FROM stories
+    WHERE created_at > datetime('now', ? || ' hours')
+    AND content_variants LIKE '%"contentMode":"thread"%'
+  `).get(`-${hours}`) as { cnt: number };
+  return row.cnt;
+}

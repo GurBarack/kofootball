@@ -1,4 +1,5 @@
 import type { FormattedPost } from '../content/post-builder.js';
+import type { ContentPiece } from '../content/formatter.js';
 
 export interface TelegramInlineButton {
   text: string;
@@ -14,4 +15,8 @@ export interface StoryDeliveryPayload {
   reasoning?: string;
   candidates: FormattedPost[];
   dataSummary: string;
+  thread?: {
+    tweets: ContentPiece[];
+    hashtags: string[];
+  };
 }

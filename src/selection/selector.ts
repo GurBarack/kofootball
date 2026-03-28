@@ -6,6 +6,39 @@ import type { StoryRow } from '../storage/stories-repo.js';
 import type { ContentMode } from '../content/formatter.js';
 import type { NewsSignals } from '../news/signals.js';
 
+// ── Thread eligibility ──────────────────────────────────────────────────
+
+export function hasRecentThread(recentStories: StoryRow[]): boolean {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  for (const row of recentStories) {
+    if (new Date(row.created_at).getTime() < cutoff) continue;
+    if (!row.content_variants) continue;
+    try {
+      const parsed = JSON.parse(row.content_variants);
+      if (!Array.isArray(parsed) && parsed.contentMode === 'thread') return true;
+    } catch { /* ignore parse errors */ }
+  }
+  return false;
+}
+
+function isThreadEligible(story: ScoredStory, narrativeStrength: number): boolean {
+  const p = story.payload as Record<string, unknown>;
+
+  // Route 1: Type-based (strict)
+  if ((story.type === 'title_race' || story.type === 'relegation')
+    && story.score >= 75
+    && ((p.gamesLeft as number) ?? Infinity) <= 8) {
+    return true;
+  }
+
+  // Route 2: Narrative-based (flexible)
+  if (narrativeStrength >= 70 && story.score >= 65) {
+    return true;
+  }
+
+  return false;
+}
+
 // ── Types ────────────────────────────────────────────────────────────────
 
 export interface PublishableStory extends ScoredStory {
@@ -274,6 +307,27 @@ export function selectForPublishing(
 
   // 3. Sort by compositeRank descending
   scored.sort((a, b) => b.compositeRank - a.compositeRank);
+
+  // 3b. Thread eligibility: at most 1 per run, blocked if recent thread exists
+  const threadBlocked = hasRecentThread(recentStories);
+  let threadAssigned = false;
+  if (!threadBlocked) {
+    for (const story of scored) {
+      if (isThreadEligible(story, story.narrativeStrength)) {
+        story.contentMode = 'thread';
+        story.is_thread_candidate = true;
+        threadAssigned = true;
+        logger.info({
+          type: story.type,
+          headline: story.headline,
+          compositeRank: Math.round(story.compositeRank * 10) / 10,
+        }, 'Selector: thread candidate assigned');
+        break; // only one per run
+      }
+    }
+  } else {
+    logger.info('Selector: thread blocked (recent thread within 24h)');
+  }
 
   // 4. Narrative dedup: skip stories with >50% team overlap with already-selected
   //    or recently created stories

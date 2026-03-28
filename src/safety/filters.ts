@@ -2,7 +2,7 @@ import { config } from '../config.js';
 import { getRecentStories } from '../storage/stories-repo.js';
 import { logger } from '../utils/logger.js';
 import type { ScoredStory } from '../detection/detector.js';
-import type { StructuredContent, ContentMetadata } from '../content/formatter.js';
+import type { StructuredContent, ContentMetadata, ContentPiece } from '../content/formatter.js';
 
 // ── Score threshold ─────────────────────────────────────────────────────
 
@@ -118,5 +118,58 @@ export function postFilter(content: StructuredContent, metadata?: ContentMetadat
   if (!quality.ok) {
     return { passed: false, reason: quality.reason };
   }
+  return { passed: true };
+}
+
+// ── Thread quality gate ────────────────────────────────────────────────
+
+const BANNED_PHRASES = ["it's all to play for", 'crunch time', 'must-win', 'scenes', 'massive'];
+
+export function passesThreadQuality(
+  tweets: ContentPiece[],
+  metadata?: ContentMetadata,
+): FilterResult {
+  const { minTweets, maxTweets, maxTweetChars, openingMaxChars } = config.threads;
+
+  if (tweets.length < minTweets) {
+    return { passed: false, reason: `Too few tweets (${tweets.length}, min ${minTweets})` };
+  }
+  if (tweets.length > maxTweets) {
+    return { passed: false, reason: `Too many tweets (${tweets.length}, max ${maxTweets})` };
+  }
+
+  // Opening tweet needs room for "1/N 🧵" prefix
+  if (tweets[0].mainText.length > openingMaxChars) {
+    return { passed: false, reason: `Opening tweet too long (${tweets[0].mainText.length} chars, max ${openingMaxChars})` };
+  }
+
+  for (let i = 0; i < tweets.length; i++) {
+    const text = tweets[i].mainText;
+
+    if (text.length < 20) {
+      return { passed: false, reason: `Tweet ${i + 1} too short (${text.length} chars, min 20)` };
+    }
+    if (text.length > maxTweetChars) {
+      return { passed: false, reason: `Tweet ${i + 1} too long (${text.length} chars, max ${maxTweetChars})` };
+    }
+
+    // Banned phrases
+    const lower = text.toLowerCase();
+    for (const phrase of BANNED_PHRASES) {
+      if (lower.includes(phrase)) {
+        return { passed: false, reason: `Tweet ${i + 1} contains banned phrase: "${phrase}"` };
+      }
+    }
+
+    // Probability guard (same as posts)
+    if (!hasProbabilityData(metadata)) {
+      for (const pattern of PROBABILITY_PATTERNS) {
+        if (pattern.test(text)) {
+          return { passed: false, reason: `Tweet ${i + 1}: numerical probability claim without data` };
+        }
+      }
+    }
+  }
+
   return { passed: true };
 }

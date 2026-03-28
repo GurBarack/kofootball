@@ -45,6 +45,49 @@ export async function sendMessageWithButtons(
   return messageId;
 }
 
+// ── Thread preview ─────────────────────────────────────────────────────
+
+export async function sendThreadPreview(
+  storyId: number,
+  tweets: { mainText: string }[],
+  hashtags: string[],
+): Promise<number[]> {
+  const messageIds: number[] = [];
+  const total = tweets.length;
+
+  // Compose all tweets into a single plain-text message
+  const lines: string[] = [`\uD83E\uDDF5 THREAD PREVIEW (${total} tweets)\n`];
+
+  for (let i = 0; i < tweets.length; i++) {
+    const prefix = i === 0 ? `1/${total} \uD83E\uDDF5 ` : `${i + 1}/${total} `;
+    lines.push(`${prefix}${tweets[i].mainText}`);
+    if (i < tweets.length - 1) lines.push('\u2193');
+  }
+
+  // Hashtags on last line
+  if (hashtags.length > 0) {
+    lines.push(`\n${hashtags.join(' ')}`);
+  }
+
+  const previewId = await sendPlainMessage(lines.join('\n'));
+  messageIds.push(previewId);
+
+  await delay(INTER_MESSAGE_DELAY_MS);
+
+  // Overview message with approve/reject buttons
+  const overviewText = `<b>\uD83E\uDDF5 Thread</b> | <code>#ID-${storyId}</code> | ${total} tweets`;
+  const buttons = [[
+    { text: '\u2705 Approve Thread', callback_data: `approve:${storyId}` },
+    { text: '\u274C Reject', callback_data: `reject:${storyId}` },
+    { text: '\u270F\uFE0F Improve', callback_data: `improve:${storyId}` },
+  ]];
+  const overviewId = await sendMessageWithButtons(overviewText, buttons);
+  messageIds.push(overviewId);
+
+  logger.info({ storyId, tweetCount: total, messageCount: messageIds.length }, 'Thread preview sent');
+  return messageIds;
+}
+
 // ── Story delivery ──────────────────────────────────────────────────────
 
 const LABEL_DISPLAY: Record<string, string> = {
