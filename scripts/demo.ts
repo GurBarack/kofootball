@@ -3,11 +3,13 @@
  * No API keys needed.
  */
 import { buildPrompt } from '../src/content/prompts.js';
+import { buildBrief } from '../src/brief/brief-builder.js';
 import type { StructuredContent } from '../src/content/formatter.js';
 import { generateHashtags } from '../src/content/hashtags.js';
 import { buildPostCandidates, formatForX } from '../src/content/post-builder.js';
 import { scoreStory } from '../src/detection/scorer.js';
 import type { ScoredStory } from '../src/detection/detector.js';
+import type { PublishableStory } from '../src/selection/selector.js';
 import type { StandingRow } from '../src/storage/standings-repo.js';
 import { detectTitleRace } from '../src/detection/rules/title-race.js';
 import { detectRelegation } from '../src/detection/rules/relegation.js';
@@ -75,7 +77,9 @@ function run() {
     }
 
     console.log('\n── PROMPT SENT TO LLM ──');
-    const { user } = buildPrompt(scored);
+    const pub1: PublishableStory = { ...scored, contentMode: 'short_post', narrativeStrength: 50, compositeRank: 50, is_thread_candidate: false };
+    const brief1 = buildBrief(pub1);
+    const { user } = buildPrompt(brief1);
     console.log(user);
   }
 
@@ -101,7 +105,9 @@ function run() {
     }
 
     console.log('\n\n── PROMPT SENT TO LLM ──');
-    const { user } = buildPrompt(scored);
+    const pub2: PublishableStory = { ...scored, contentMode: 'short_post', narrativeStrength: 50, compositeRank: 50, is_thread_candidate: false };
+    const brief2 = buildBrief(pub2);
+    const { user } = buildPrompt(brief2);
     console.log(user);
   }
 

@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import type { ScoredStory } from '../detection/detector.js';
+import type { StoryBrief } from '../brief/brief-builder.js';
 
 const TONE_BLOCK = config.tone.system.map(line => `- ${line}`).join('\n');
 
@@ -26,32 +26,32 @@ RULES:
 - Never use: "it's all to play for", "crunch time", "must-win", "drama", "scenes", "huge", "massive"
 - Don't narrate — react. Write like you just saw the table and can't keep quiet.`;
 
-function buildContext(story: ScoredStory): string {
-  const leagueName = config.leagues[story.league_id] || `League ${story.league_id}`;
-  const payload = story.payload as Record<string, unknown>;
+function buildContextFromBrief(brief: StoryBrief): string {
+  let context = `Competition: ${brief.competition}\nStory type: ${brief.storyType}\n`;
+  context += `Entity: ${brief.entity}\n`;
+  context += `\nWhat happened: ${brief.whatHappened}\n`;
+  context += `Why it matters: ${brief.whyItMatters}\n`;
+  context += `\nMain angle: ${brief.mainAngle}\n`;
+  context += `Tension: ${brief.tension}\n`;
+  context += `Discussion hook: ${brief.discussionHook}\n`;
 
-  let context = `League: ${leagueName}\nStory: ${story.type}\n`;
-
-  const teams = payload.teams as Array<Record<string, unknown>> | undefined;
-  if (teams) {
-    context += '\nTable:\n';
-    for (const t of teams) {
-      const parts = [`${t.name}`, `${t.points}pts`];
-      if (t.rank) parts.push(`#${t.rank}`);
-      if (t.form) parts.push(`form: ${t.form}`);
-      if (t.goal_diff !== undefined && t.goal_diff !== 'N/A') parts.push(`GD ${Number(t.goal_diff) > 0 ? '+' : ''}${t.goal_diff}`);
-      context += `  ${parts.join(' | ')}\n`;
+  if (brief.keyFacts.length > 0) {
+    context += '\nKey facts:\n';
+    for (const kf of brief.keyFacts) {
+      context += `  - ${kf.fact}\n`;
     }
   }
 
-  if (payload.gamesLeft !== undefined) context += `\nGames left: ${payload.gamesLeft}`;
-  if (payload.pointGap !== undefined) context += `\nGap: ${payload.pointGap} points`;
-  if (payload.gapAtCutoff !== undefined) context += `\nGap at cutoff: ${payload.gapAtCutoff} points`;
-  if (payload.cutoffRank) context += `\nRelegation line: position ${payload.cutoffRank}`;
-  if (payload.streakType) context += `\nStreak: ${payload.streakType} | Recent form: ${payload.form}`;
-  if (payload.fixture) {
-    const fix = payload.fixture as Record<string, unknown>;
-    context += `\nNext fixture: ${fix.home} vs ${fix.away} (${fix.round})`;
+  if (brief.sourceSignals.length > 0) {
+    context += '\nNews context:\n';
+    for (const sig of brief.sourceSignals) {
+      context += `  - ${sig.team}: ${sig.articleCount} articles, buzz ${sig.buzzScore}`;
+      if (sig.events.length > 0) context += ` [${sig.events.join(', ')}]`;
+      context += '\n';
+      for (const hl of sig.headlines) {
+        context += `    "${hl}"\n`;
+      }
+    }
   }
 
   return context;
@@ -65,9 +65,9 @@ const TYPE_INSTRUCTIONS: Record<string, string> = {
   momentum: 'This form run means something. Connect it to where they are in the table. What happens if this continues?',
 };
 
-export function buildPrompt(story: ScoredStory): { system: string; user: string } {
-  const context = buildContext(story);
-  const typeInstruction = TYPE_INSTRUCTIONS[story.type] || '';
+export function buildPrompt(brief: StoryBrief): { system: string; user: string } {
+  const context = buildContextFromBrief(brief);
+  const typeInstruction = TYPE_INSTRUCTIONS[brief.storyType] || '';
 
   return {
     system: SYSTEM_PROMPT,

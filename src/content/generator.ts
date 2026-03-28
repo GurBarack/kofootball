@@ -4,7 +4,7 @@ import { logger } from '../utils/logger.js';
 import { buildPrompt } from './prompts.js';
 import { buildThreadPrompt } from './thread-prompt.js';
 import { parseVariants, parseThread, type StructuredContent, type ContentPiece } from './formatter.js';
-import type { ScoredStory } from '../detection/detector.js';
+import type { StoryBrief } from '../brief/brief-builder.js';
 
 let _client: OpenAI | null = null;
 
@@ -15,10 +15,10 @@ function getClient(): OpenAI {
   return _client;
 }
 
-export async function generateContent(story: ScoredStory): Promise<StructuredContent> {
-  const { system, user } = buildPrompt(story);
+export async function generateContent(brief: StoryBrief): Promise<StructuredContent> {
+  const { system, user } = buildPrompt(brief);
 
-  logger.info({ type: story.type, headline: story.headline }, 'Generating content');
+  logger.info({ type: brief.storyType, headline: brief.headline }, 'Generating content');
 
   const client = getClient();
   const response = await client.chat.completions.create({
@@ -41,10 +41,10 @@ export async function generateContent(story: ScoredStory): Promise<StructuredCon
   return content;
 }
 
-export async function generateThread(story: ScoredStory): Promise<ContentPiece[] | null> {
-  const { system, user } = buildThreadPrompt(story);
+export async function generateThread(brief: StoryBrief): Promise<ContentPiece[] | null> {
+  const { system, user } = buildThreadPrompt(brief);
 
-  logger.info({ type: story.type, headline: story.headline }, 'Generating thread');
+  logger.info({ type: brief.storyType, headline: brief.headline }, 'Generating thread');
 
   const client = getClient();
   const response = await client.chat.completions.create({

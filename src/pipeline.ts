@@ -13,10 +13,12 @@ import { preFilter, postFilter, passesThreadQuality } from './safety/filters.js'
 import { selectForPublishing } from './selection/selector.js';
 import { fetchNewsWithStats } from './news/fetch-sources.js';
 import { extractSignals } from './news/signals.js';
+import { buildBrief } from './brief/brief-builder.js';
 import type { ScoredStory } from './detection/detector.js';
 import type { PublishableStory } from './selection/selector.js';
 import type { NewsSignals } from './news/signals.js';
 import type { EnrichedContent } from './content/formatter.js';
+import type { StoryBrief } from './brief/brief-builder.js';
 
 export interface PipelineResult {
   fetched: number;
@@ -75,20 +77,31 @@ function detectAndFilter(): ScoredStory[] {
   return filtered;
 }
 
-// ── Step 3: Generate content ────────────────────────────────────────────
+// ── Step 3: Build brief + generate content ──────────────────────────────
 
-function buildDataSummary(story: ScoredStory): string {
-  const payload = story.payload as Record<string, unknown>;
+function buildDataSummary(brief: StoryBrief): string {
   const parts: string[] = [];
 
-  const teams = payload.teams as Array<Record<string, unknown>> | undefined;
-  if (teams) {
-    parts.push(teams.map(t => `${t.name} ${t.points}pts`).join(' \u00B7 '));
+  // Extract team points from keyFacts
+  const standingFacts = brief.keyFacts
+    .filter(kf => kf.source === 'standings' && kf.fact.includes('pts'))
+    .map(kf => {
+      const match = kf.fact.match(/^(.+?):/);
+      const ptsMatch = kf.fact.match(/(\d+)pts/);
+      if (match && ptsMatch) return `${match[1]} ${ptsMatch[1]}pts`;
+      return null;
+    })
+    .filter(Boolean);
+
+  if (standingFacts.length > 0) {
+    parts.push(standingFacts.join(' \u00B7 '));
   }
 
-  if (payload.gamesLeft !== undefined) {
-    let line = `${payload.gamesLeft} games left`;
-    if (payload.pointGap !== undefined) line += ` \u00B7 ${payload.pointGap}pt gap`;
+  const gamesFact = brief.keyFacts.find(kf => kf.fact.includes('games remaining'));
+  const gapFact = brief.keyFacts.find(kf => kf.source === 'gap');
+  if (gamesFact) {
+    let line = gamesFact.fact;
+    if (gapFact) line += ` \u00B7 ${gapFact.fact}`;
     parts.push(line);
   }
 
@@ -97,6 +110,7 @@ function buildDataSummary(story: ScoredStory): string {
 
 async function generateForStory(
   story: PublishableStory,
+  brief: StoryBrief,
 ): Promise<{ storyId: number; enriched: EnrichedContent } | null> {
   // Persist story shell first
   const storyId = insertStory({
@@ -107,6 +121,9 @@ async function generateForStory(
     payload_json: JSON.stringify(story.payload),
   });
 
+  // Attach storyId to brief
+  brief.storyId = storyId;
+
   try {
     // Generate hashtags early — used by both paths
     const hashtags = generateHashtags(story);
@@ -114,7 +131,7 @@ async function generateForStory(
 
     // Thread path
     if (story.contentMode === 'thread') {
-      const tweets = await generateThread(story);
+      const tweets = await generateThread(brief);
       if (tweets) {
         const threadQuality = passesThreadQuality(tweets, metadata);
         if (threadQuality.passed) {
@@ -134,10 +151,11 @@ async function generateForStory(
       }
       // Fallback: continue to short_post generation below
       story.contentMode = 'short_post';
+      brief.contentRecommendation = 'short_post';
     }
 
     // Short post path (default + thread fallback)
-    const content = await generateContent(story);
+    const content = await generateContent(brief);
 
     // Post-generation quality check (includes probability guard)
     const quality = postFilter(content, metadata);
@@ -172,6 +190,7 @@ async function deliver(
   story: PublishableStory,
   storyId: number,
   enriched: EnrichedContent,
+  brief: StoryBrief,
 ): Promise<boolean> {
   const leagueName = config.leagues[story.league_id] || `League ${story.league_id}`;
 
@@ -192,7 +211,7 @@ async function deliver(
       headline: story.headline,
       score: story.score,
       candidates: formatted,
-      dataSummary: buildDataSummary(story),
+      dataSummary: buildDataSummary(brief),
     });
     return true;
   } catch (err) {
@@ -251,9 +270,23 @@ export async function runPipeline(): Promise<PipelineResult> {
     return result;
   }
 
-  // 3. Generate + 4. Deliver — sequential per story to respect rate limits
+  // 3. Build briefs + generate + deliver — sequential per story
   for (const story of stories) {
-    const generated = await generateForStory(story);
+    // 3a. Build structured brief (replaces raw payload as generator input)
+    const brief = buildBrief(story, newsSignals);
+
+    logger.info({
+      type: brief.storyType,
+      entity: brief.entity,
+      confidence: brief.storyConfidence,
+      fanReaction: brief.fanReactionPotential,
+      contentRec: brief.contentRecommendation,
+      keyFactCount: brief.keyFacts.length,
+      signalCount: brief.sourceSignals.length,
+    }, 'Brief built');
+
+    // 3b. Generate content from brief
+    const generated = await generateForStory(story, brief);
     if (!generated) {
       result.filtered++;
       continue;
@@ -261,7 +294,8 @@ export async function runPipeline(): Promise<PipelineResult> {
 
     result.generated++;
 
-    const sent = await deliver(story, generated.storyId, generated.enriched);
+    // 4. Deliver
+    const sent = await deliver(story, generated.storyId, generated.enriched, brief);
     if (sent) {
       result.delivered++;
     } else {
