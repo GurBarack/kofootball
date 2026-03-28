@@ -1,6 +1,6 @@
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
-import { computeBuzzBoost } from '../news/signals.js';
+import { computeBuzzBoost, computeSignalBoost } from '../news/signals.js';
 import type { ScoredStory } from '../detection/detector.js';
 import type { StoryRow } from '../storage/stories-repo.js';
 import type { ContentMode } from '../content/formatter.js';
@@ -226,6 +226,10 @@ export function selectForPublishing(
     const { boost: buzzBoost, topTeam: buzzTeam } = computeBuzzBoost(storyTeams, newsSignals);
     compositeRank += buzzBoost;
 
+    // 1c. Event signal boost (additive, 0-10)
+    const { boost: signalBoost, topSignal, topTeam: signalTeam } = computeSignalBoost(storyTeams, newsSignals);
+    compositeRank += signalBoost;
+
     // 2. Team cooldown (soft): penalize if primary teams appeared recently
     const cooldownCutoff = Date.now() - teamCooldownHours * 60 * 60 * 1000;
 
@@ -257,6 +261,9 @@ export function selectForPublishing(
       narrativeStrength,
       newsBuzz: buzzBoost,
       buzzTeam,
+      newsSignal: signalBoost,
+      topSignal,
+      signalTeam,
       penalties: penalties.length > 0 ? penalties : 'none',
       compositeRank: Math.round(compositeRank * 10) / 10,
       teams: storyTeams,

@@ -64,3 +64,60 @@ export function matchTeams(text: string): string[] {
 
   return found;
 }
+
+// ── Event signal detection ───────────────────────────────────────────────
+
+export type EventType =
+  | 'manager_change'
+  | 'key_injury'
+  | 'losing_streak'
+  | 'winning_streak'
+  | 'manager_pressure'
+  | 'high_pressure_fixture';
+
+const EVENT_PATTERNS: { type: EventType; patterns: RegExp[] }[] = [
+  {
+    type: 'manager_change',
+    patterns: [/\bsacked\b/, /\bdismissed\b/, /\bfired\b/, /\bnew manager\b/, /\bnew head coach\b/, /\bappointed\b.*\bmanager\b/],
+  },
+  {
+    type: 'key_injury',
+    patterns: [/\binjur(?:y|ed)\b/, /\bruled out\b/, /\bout for\b/, /\bsidelined\b/, /\bsetback\b/],
+  },
+  {
+    type: 'losing_streak',
+    patterns: [/\d+(?:th|rd|nd|st)?\s*(?:straight|consecutive)\s*(?:loss|defeat)/, /lost\s+(?:again|\d+\s*in\s*a\s*row)/, /\bwinless\s+in\s+\d+/],
+  },
+  {
+    type: 'winning_streak',
+    patterns: [/won\s+\d+\s*in\s*a\s*row/, /\d+(?:th|rd|nd|st)?\s*(?:straight|consecutive)\s*win/, /\bunbeaten\s+in\s+\d+/],
+  },
+  {
+    type: 'manager_pressure',
+    patterns: [/\bunder pressure\b/, /\bpressure mounts\b/, /\bjob\s+(?:on the line|in danger|at risk)\b/, /\bhot seat\b/],
+  },
+  {
+    type: 'high_pressure_fixture',
+    patterns: [/\bcrucial\b/, /\bdecisive\b/, /\bmust[- ]win\b/, /\btitle[- ]decid/, /\bdo[- ]or[- ]die\b/],
+  },
+];
+
+/**
+ * Detect event signals from article text.
+ * Returns deduplicated event types found in the text.
+ */
+export function matchEventSignals(text: string): EventType[] {
+  const lower = text.toLowerCase();
+  const found: EventType[] = [];
+
+  for (const { type, patterns } of EVENT_PATTERNS) {
+    for (const re of patterns) {
+      if (re.test(lower)) {
+        found.push(type);
+        break; // one match per event type is enough
+      }
+    }
+  }
+
+  return found;
+}

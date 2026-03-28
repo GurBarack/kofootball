@@ -67,6 +67,7 @@ export const config = {
     fetchTimeoutMs: 5000,
     buzzScoreCap: 20,
     buzzBoostMax: 15,
+    signalBoostMax: 10,
   },
 
   // Supported leagues (full catalog — enabledLeagues controls which are active)
