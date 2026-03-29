@@ -68,6 +68,10 @@ export const config = {
     buzzScoreCap: 20,
     buzzBoostMax: 15,
     signalBoostMax: 10,
+    signalOverrideMinStrength: 2,
+    signalOverrideMinDistinct: 2,
+    threadSignalMinDistinct: 2,
+    threadSignalMinStrength: 3,
   },
 
   threads: {

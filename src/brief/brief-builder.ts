@@ -1,7 +1,8 @@
 import { config } from '../config.js';
 import type { ScoredStory } from '../detection/detector.js';
 import type { PublishableStory } from '../selection/selector.js';
-import type { NewsSignals, TeamBuzz } from '../news/signals.js';
+import type { NewsSignals, TeamBuzz, EventSignal } from '../news/signals.js';
+import type { EventType } from '../news/sources.js';
 
 // ── Brief types ─────────────────────────────────────────────────────────
 
@@ -16,6 +17,16 @@ export interface SourceSignal {
   buzzScore: number;
   headlines: string[];
   events: string[];
+}
+
+// ── Internal signal context (not exported) ──────────────────────────────
+
+interface TeamEventContext {
+  team: string;
+  events: EventSignal[];
+  buzzScore: number;
+  totalStrength: number;
+  distinctTypes: Set<EventType>;
 }
 
 export interface StoryBrief {
@@ -185,8 +196,13 @@ function buildWhyItMatters(story: ScoredStory): string {
   }
 }
 
-function buildMainAngle(story: ScoredStory): string {
+function buildMainAngle(story: ScoredStory, teamEvents: TeamEventContext[]): string {
+  // Strong signals override type-based angle
+  const signalAngle = buildSignalAngle(teamEvents);
+  if (signalAngle) return signalAngle;
+
   const p = story.payload as Record<string, unknown>;
+  let typeAngle: string;
 
   switch (story.type) {
     case 'title_race': {
@@ -195,9 +211,10 @@ function buildMainAngle(story: ScoredStory): string {
         const fs = formScore(t.form ?? '');
         return fs > best.fs ? { name: t.name, fs } : best;
       }, { name: '', fs: -Infinity });
-      return bestForm.name
+      typeAngle = bestForm.name
         ? `${bestForm.name}'s form makes them the most dangerous contender right now.`
         : `The title race is wide open with no clear frontrunner on form.`;
+      break;
     }
     case 'relegation': {
       const teams = (p.teams as Array<{ name: string; form?: string }>) ?? [];
@@ -205,24 +222,38 @@ function buildMainAngle(story: ScoredStory): string {
         const fs = formScore(t.form ?? '');
         return fs < worst.fs ? { name: t.name, fs } : worst;
       }, { name: '', fs: Infinity });
-      return worstForm.name
+      typeAngle = worstForm.name
         ? `${worstForm.name}'s form suggests they are the most likely to go down.`
         : `The relegation picture remains unclear — form alone isn't separating anyone.`;
+      break;
     }
     case 'momentum':
-      return p.streakType === 'hot'
+      typeAngle = p.streakType === 'hot'
         ? `${p.team}'s recent surge is the kind of run that changes season narratives.`
         : `${p.team}'s slide is alarming and raises pressure on the manager and squad.`;
+      break;
     case 'qualification':
-      return `The race for European spots is tighter than the table suggests — form is the real differentiator.`;
+      typeAngle = `The race for European spots is tighter than the table suggests — form is the real differentiator.`;
+      break;
     case 'critical_fixture':
-      return `This is effectively a six-pointer — the result will reshape the standings for both sides.`;
+      typeAngle = `This is effectively a six-pointer — the result will reshape the standings for both sides.`;
+      break;
     default:
-      return `The data points to a story the table alone doesn't tell.`;
+      typeAngle = `The data points to a story the table alone doesn't tell.`;
   }
+
+  // Weak signals: append clause to type-based angle
+  const clause = buildWeakSignalClause(teamEvents);
+  if (clause) typeAngle += clause;
+
+  return typeAngle;
 }
 
-function buildTension(story: ScoredStory): string {
+function buildTension(story: ScoredStory, teamEvents: TeamEventContext[]): string {
+  // Strong signals override type-based tension
+  const signalTension = buildSignalTension(teamEvents);
+  if (signalTension) return signalTension;
+
   const p = story.payload as Record<string, unknown>;
 
   switch (story.type) {
@@ -338,6 +369,156 @@ function extractTeamNamesForSignals(story: ScoredStory): string[] {
   return [];
 }
 
+// ── Signal context collection ───────────────────────────────────────────
+
+function collectTeamEvents(story: ScoredStory, newsSignals?: NewsSignals): TeamEventContext[] {
+  if (!newsSignals) return [];
+
+  const teamNames = extractTeamNamesForSignals(story);
+  const contexts: TeamEventContext[] = [];
+
+  for (const name of teamNames) {
+    const buzz = newsSignals.teamBuzz.get(name);
+    if (!buzz || buzz.signals.length === 0) continue;
+    const totalStrength = buzz.signals.reduce((sum, s) => sum + s.strength, 0);
+    const distinctTypes = new Set(buzz.signals.map(s => s.type));
+    contexts.push({
+      team: buzz.team,
+      events: [...buzz.signals],
+      buzzScore: buzz.buzzScore,
+      totalStrength,
+      distinctTypes,
+    });
+  }
+
+  return contexts;
+}
+
+function hasEvent(ctx: TeamEventContext, type: EventType): boolean {
+  return ctx.events.some(e => e.type === type);
+}
+
+function signalsAreStrong(teamEvents: TeamEventContext[]): boolean {
+  for (const ctx of teamEvents) {
+    if (ctx.totalStrength >= config.news.signalOverrideMinStrength) return true;
+    if (ctx.distinctTypes.size >= config.news.signalOverrideMinDistinct) return true;
+  }
+  return false;
+}
+
+// ── Signal-driven narrative ─────────────────────────────────────────────
+
+function buildSignalAngle(teamEvents: TeamEventContext[]): string | null {
+  if (!signalsAreStrong(teamEvents)) return null;
+
+  for (const ctx of teamEvents) {
+    if (hasEvent(ctx, 'manager_change') && hasEvent(ctx, 'losing_streak')) {
+      return `${ctx.team} are in freefall — a managerial exit mid-collapse signals a club that has lost control of its season.`;
+    }
+  }
+
+  for (const ctx of teamEvents) {
+    if (hasEvent(ctx, 'winning_streak') && ctx.totalStrength >= 2) {
+      return `${ctx.team}'s momentum is the story now — the question is whether it becomes pressure or propels them further.`;
+    }
+  }
+
+  for (const ctx of teamEvents) {
+    if (hasEvent(ctx, 'key_injury') && ctx.totalStrength >= 2) {
+      return `${ctx.team}'s squad depth is about to be tested. How they cope without key players defines their season.`;
+    }
+  }
+
+  for (const ctx of teamEvents) {
+    if (hasEvent(ctx, 'manager_pressure')) {
+      return `The spotlight is on ${ctx.team}'s manager. Results in the next few games determine whether the board acts.`;
+    }
+  }
+
+  for (const ctx of teamEvents) {
+    if (hasEvent(ctx, 'manager_change')) {
+      return `A new manager at ${ctx.team} resets the equation — new system, new energy, new uncertainty.`;
+    }
+  }
+
+  return null;
+}
+
+function buildSignalTension(teamEvents: TeamEventContext[]): string | null {
+  if (!signalsAreStrong(teamEvents)) return null;
+
+  for (const ctx of teamEvents) {
+    if (hasEvent(ctx, 'manager_change') && hasEvent(ctx, 'losing_streak')) {
+      return `Is this a reset or a sign the damage is already done? New managers inherit crises — they don't always solve them.`;
+    }
+  }
+
+  for (const ctx of teamEvents) {
+    if (hasEvent(ctx, 'winning_streak') && ctx.totalStrength >= 2) {
+      return `Momentum is addictive but fragile. One loss and the narrative flips from 'unstoppable' to 'found out'.`;
+    }
+  }
+
+  for (const ctx of teamEvents) {
+    if (hasEvent(ctx, 'key_injury') && ctx.totalStrength >= 2) {
+      return `Missing key players exposes whether a squad was built for a season or built around individuals.`;
+    }
+  }
+
+  for (const ctx of teamEvents) {
+    if (hasEvent(ctx, 'manager_pressure') && ctx.distinctTypes.size >= 2) {
+      return `Pressure on the touchline meets turbulence on the pitch. Something will break first.`;
+    }
+  }
+
+  return null;
+}
+
+function buildWeakSignalClause(teamEvents: TeamEventContext[]): string | null {
+  if (teamEvents.length === 0) return null;
+  // Only apply for weak signals (not strong enough to override)
+  if (signalsAreStrong(teamEvents)) return null;
+
+  for (const ctx of teamEvents) {
+    if (hasEvent(ctx, 'manager_change'))
+      return ` A managerial change at ${ctx.team} adds an unpredictable element.`;
+    if (hasEvent(ctx, 'key_injury'))
+      return ` An injury concern at ${ctx.team} could shift the balance.`;
+    if (hasEvent(ctx, 'manager_pressure'))
+      return ` Growing pressure on ${ctx.team}'s manager adds background tension.`;
+  }
+
+  return null;
+}
+
+// ── Content recommendation (editorial decision) ─────────────────────────
+
+function computeContentRecommendation(
+  story: PublishableStory,
+  teamEvents: TeamEventContext[],
+): 'short_post' | 'thread' {
+  const p = story.payload as Record<string, unknown>;
+  const gamesLeft = (p.gamesLeft as number) ?? 20;
+
+  // High narrative strength
+  if (story.narrativeStrength >= 70) return 'thread';
+
+  // Strong signals: multiple distinct event types or high total strength
+  const allDistinct = new Set<EventType>();
+  let maxStrength = 0;
+  for (const ctx of teamEvents) {
+    for (const t of ctx.distinctTypes) allDistinct.add(t);
+    if (ctx.totalStrength > maxStrength) maxStrength = ctx.totalStrength;
+  }
+  if (allDistinct.size >= config.news.threadSignalMinDistinct) return 'thread';
+  if (maxStrength >= config.news.threadSignalMinStrength) return 'thread';
+
+  // Late season + high stakes
+  if (gamesLeft <= 5 && story.score >= 70) return 'thread';
+
+  return 'short_post';
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 function formScore(form: string): number {
@@ -357,6 +538,7 @@ export function buildBrief(
   storyId?: number,
 ): StoryBrief {
   const competition = config.leagues[story.league_id] || `League ${story.league_id}`;
+  const teamEvents = collectTeamEvents(story, newsSignals);
 
   return {
     storyId,
@@ -368,11 +550,11 @@ export function buildBrief(
     whatHappened: buildWhatHappened(story),
     whyItMatters: buildWhyItMatters(story),
     keyFacts: extractKeyFacts(story),
-    mainAngle: buildMainAngle(story),
-    tension: buildTension(story),
+    mainAngle: buildMainAngle(story, teamEvents),
+    tension: buildTension(story, teamEvents),
     discussionHook: buildDiscussionHook(story),
     fanReactionPotential: assessFanReaction(story),
-    contentRecommendation: story.contentMode,
+    contentRecommendation: computeContentRecommendation(story, teamEvents),
     storyConfidence: assessConfidence(story),
     sourceSignals: extractSourceSignals(story, newsSignals),
   };

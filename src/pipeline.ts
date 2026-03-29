@@ -275,6 +275,9 @@ export async function runPipeline(): Promise<PipelineResult> {
     // 3a. Build structured brief (replaces raw payload as generator input)
     const brief = buildBrief(story, newsSignals);
 
+    // Brief's editorial recommendation overrides selector's preliminary contentMode
+    story.contentMode = brief.contentRecommendation;
+
     logger.info({
       type: brief.storyType,
       entity: brief.entity,

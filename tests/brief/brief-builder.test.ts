@@ -218,17 +218,76 @@ describe('buildBrief — narrative', () => {
   });
 });
 
-// ── Content recommendation ──────────────────────────────────────────────
+// ── Content recommendation (editorial decision) ────────────────────────
 
 describe('buildBrief — contentRecommendation', () => {
-  it('matches story contentMode for short_post', () => {
-    const brief = buildBrief(makePublishable({ contentMode: 'short_post' }));
+  it('returns short_post for moderate story without signals', () => {
+    const brief = buildBrief(makePublishable({ narrativeStrength: 50, score: 60 }));
     expect(brief.contentRecommendation).toBe('short_post');
   });
 
-  it('matches story contentMode for thread', () => {
-    const brief = buildBrief(makePublishable({ contentMode: 'thread' }));
+  it('returns thread for high narrativeStrength', () => {
+    const brief = buildBrief(makePublishable({ narrativeStrength: 70, score: 65 }));
     expect(brief.contentRecommendation).toBe('thread');
+  });
+
+  it('returns thread for rich signals (2+ distinct event types)', () => {
+    const signals = {
+      teamBuzz: new Map([
+        ['arsenal', {
+          team: 'arsenal',
+          articleCount: 6,
+          buzzScore: 15,
+          headlines: ['Arsenal injury blow', 'Manager under fire'],
+          signals: [
+            { type: 'key_injury' as const, strength: 2 },
+            { type: 'manager_pressure' as const, strength: 1 },
+          ],
+        }],
+      ]),
+      fetchedAt: Date.now(),
+      sourcesOk: 3,
+      sourcesTotal: 4,
+    };
+    const brief = buildBrief(makePublishable({ narrativeStrength: 40, score: 55 }), signals);
+    expect(brief.contentRecommendation).toBe('thread');
+  });
+
+  it('returns thread for high total signal strength (>=3)', () => {
+    const signals = {
+      teamBuzz: new Map([
+        ['arsenal', {
+          team: 'arsenal',
+          articleCount: 8,
+          buzzScore: 18,
+          headlines: ['Arsenal lose again', 'Arsenal crisis'],
+          signals: [{ type: 'losing_streak' as const, strength: 3 }],
+        }],
+      ]),
+      fetchedAt: Date.now(),
+      sourcesOk: 3,
+      sourcesTotal: 4,
+    };
+    const brief = buildBrief(makePublishable({ narrativeStrength: 40, score: 55 }), signals);
+    expect(brief.contentRecommendation).toBe('thread');
+  });
+
+  it('returns thread for late-season high-stakes', () => {
+    const brief = buildBrief(makePublishable({
+      narrativeStrength: 50,
+      score: 75,
+      payload: { ...makePublishable().payload as object, gamesLeft: 4 },
+    }));
+    expect(brief.contentRecommendation).toBe('thread');
+  });
+
+  it('returns short_post for weak everything', () => {
+    const brief = buildBrief(makePublishable({
+      narrativeStrength: 30,
+      score: 50,
+      payload: { ...makePublishable().payload as object, gamesLeft: 15 },
+    }));
+    expect(brief.contentRecommendation).toBe('short_post');
   });
 });
 
@@ -359,6 +418,128 @@ describe('buildBrief — mainAngle', () => {
     });
     const brief = buildBrief(story);
     expect(brief.mainAngle).toMatch(/six.pointer/i);
+  });
+});
+
+// ── Signal-driven mainAngle ─────────────────────────────────────────────
+
+function makeSignals(team: string, events: Array<{ type: string; strength: number }>, buzzScore = 10): ReturnType<typeof Object> {
+  return {
+    teamBuzz: new Map([
+      [team.toLowerCase(), {
+        team: team.toLowerCase(),
+        articleCount: events.reduce((s, e) => s + e.strength, 0),
+        buzzScore,
+        headlines: ['Headline 1', 'Headline 2'],
+        signals: events,
+      }],
+    ]),
+    fetchedAt: Date.now(),
+    sourcesOk: 3,
+    sourcesTotal: 4,
+  };
+}
+
+describe('buildBrief — signal-driven mainAngle', () => {
+  it('overrides with instability angle for manager_change + losing_streak', () => {
+    const signals = makeSignals('Arsenal', [
+      { type: 'manager_change', strength: 2 },
+      { type: 'losing_streak', strength: 1 },
+    ]);
+    const brief = buildBrief(makePublishable(), signals);
+    expect(brief.mainAngle).toMatch(/freefall|lost control/i);
+  });
+
+  it('overrides with momentum angle for winning_streak (strength >= 2)', () => {
+    const signals = makeSignals('Arsenal', [
+      { type: 'winning_streak', strength: 2 },
+    ]);
+    const brief = buildBrief(makePublishable(), signals);
+    expect(brief.mainAngle).toMatch(/momentum/i);
+  });
+
+  it('overrides with squad depth angle for key_injury (strength >= 2)', () => {
+    const signals = makeSignals('Arsenal', [
+      { type: 'key_injury', strength: 2 },
+    ]);
+    const brief = buildBrief(makePublishable(), signals);
+    expect(brief.mainAngle).toMatch(/squad depth|key players/i);
+  });
+
+  it('overrides with manager spotlight for manager_pressure', () => {
+    const signals = makeSignals('Arsenal', [
+      { type: 'manager_pressure', strength: 2 },
+    ]);
+    const brief = buildBrief(makePublishable(), signals);
+    expect(brief.mainAngle).toMatch(/spotlight|manager/i);
+  });
+
+  it('overrides with reset angle for manager_change alone (strong)', () => {
+    const signals = makeSignals('Arsenal', [
+      { type: 'manager_change', strength: 2 },
+    ]);
+    const brief = buildBrief(makePublishable(), signals);
+    expect(brief.mainAngle).toMatch(/new manager|resets/i);
+  });
+
+  it('appends weak signal clause for single event with strength 1', () => {
+    const signals = makeSignals('Arsenal', [
+      { type: 'manager_change', strength: 1 },
+    ]);
+    const brief = buildBrief(makePublishable(), signals);
+    // Should have type-based angle + appended clause
+    expect(brief.mainAngle).toMatch(/form/i); // type-based angle preserved
+    expect(brief.mainAngle).toMatch(/managerial change/i); // clause appended
+  });
+
+  it('falls back to type-based angle with no signals', () => {
+    const brief = buildBrief(makePublishable());
+    expect(brief.mainAngle).toMatch(/form/i);
+    expect(brief.mainAngle).not.toMatch(/freefall|momentum|squad depth/i);
+  });
+});
+
+// ── Signal-driven tension ───────────────────────────────────────────────
+
+describe('buildBrief — signal-driven tension', () => {
+  it('overrides with crisis tension for manager_change + losing_streak', () => {
+    const signals = makeSignals('Arsenal', [
+      { type: 'manager_change', strength: 2 },
+      { type: 'losing_streak', strength: 1 },
+    ]);
+    const brief = buildBrief(makePublishable(), signals);
+    expect(brief.tension).toMatch(/reset|damage/i);
+  });
+
+  it('overrides with fragility tension for winning_streak', () => {
+    const signals = makeSignals('Arsenal', [
+      { type: 'winning_streak', strength: 2 },
+    ]);
+    const brief = buildBrief(makePublishable(), signals);
+    expect(brief.tension).toMatch(/fragile|found out/i);
+  });
+
+  it('overrides with squad tension for key_injury', () => {
+    const signals = makeSignals('Arsenal', [
+      { type: 'key_injury', strength: 2 },
+    ]);
+    const brief = buildBrief(makePublishable(), signals);
+    expect(brief.tension).toMatch(/key players|individuals/i);
+  });
+
+  it('overrides with pressure tension for manager_pressure + losing_streak', () => {
+    const signals = makeSignals('Arsenal', [
+      { type: 'manager_pressure', strength: 1 },
+      { type: 'losing_streak', strength: 1 },
+    ]);
+    const brief = buildBrief(makePublishable(), signals);
+    expect(brief.tension).toMatch(/touchline|turbulence/i);
+  });
+
+  it('falls back to type-based tension with no signals', () => {
+    const brief = buildBrief(makePublishable());
+    // Type-based title_race tension
+    expect(brief.tension).toMatch(/form|gap|weekend/i);
   });
 });
 
