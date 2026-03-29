@@ -278,6 +278,13 @@ export async function runPipeline(): Promise<PipelineResult> {
     // Brief's editorial recommendation overrides selector's preliminary contentMode
     story.contentMode = brief.contentRecommendation;
 
+    // Debug: force top story into thread mode for end-to-end validation
+    if (config.threads.forceThread && story === stories[0]) {
+      story.contentMode = 'thread';
+      brief.contentRecommendation = 'thread';
+      logger.warn({ headline: story.headline }, 'FORCE_THREAD: overriding to thread mode');
+    }
+
     logger.info({
       type: brief.storyType,
       entity: brief.entity,

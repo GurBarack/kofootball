@@ -80,6 +80,7 @@ export const config = {
     maxTweets: 8,
     maxTweetChars: 280,
     openingMaxChars: 260,
+    forceThread: process.env.FORCE_THREAD === 'true',
   },
 
   // Supported leagues (full catalog — enabledLeagues controls which are active)
